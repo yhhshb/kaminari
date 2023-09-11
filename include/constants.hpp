@@ -10,8 +10,22 @@
 namespace kaminari {
 
 typedef bit::vector<uint64_t> bit_vector;
+typedef bit::rs::array<bit_vector, 64, 8, false> ranked_bit_vector;
 typedef bit::ef::array ef_sequence;
 typedef bit::parser<uint64_t> bit_parser;
+
+struct opt_t {
+    using fn_t = std::vector<std::string>;
+    fn_t input_filenames;
+    std::string output_filename;
+    std::string tmp_dir;
+    uint8_t k;
+    uint8_t m;
+    uint8_t nthreads;
+    std::size_t max_ram;
+    bool check;
+    bool verbose;
+};
 
 namespace constants {
 

@@ -181,14 +181,14 @@ hybrid::iterator::operator++()
         ++m_curr_val;
         if (m_curr_val >= m_num_docs) {  // saturate
             m_curr_val = m_num_docs;
-            return;
+            return *this;
         }
         next_comp_val();
     } else if (m_type == list_type::delta_gaps) {
         m_pos_in_list += 1;
         if (m_pos_in_list >= m_size) {  // saturate
             m_curr_val = m_num_docs;
-            return;
+            return *this;
         }
         m_prev_val = m_curr_val;
         m_curr_val = bit::decoder::delta(m_parser) + (m_prev_val + 1);
@@ -197,12 +197,13 @@ hybrid::iterator::operator++()
         m_pos_in_list += 1;
         if (m_pos_in_list >= m_size) {  // saturate
             m_curr_val = m_num_docs;
-            return;
+            return *this;
         }
         uint64_t pos = m_parser.next_1();
         assert(pos >= m_begin);
         m_curr_val = pos - m_begin;
     }
+    return *this;
 }
 
 void 

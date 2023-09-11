@@ -2,11 +2,13 @@
 #include <iostream>
 #include <fstream>
 
+
 namespace kaminari {
 
-GGCAT::GGCAT()
-    : m_instance(nullptr), m_graph_file(""), m_k(0)
-{}
+GGCAT::GGCAT(opt_t const& options)
+{
+    build(options.input_filenames, options.max_ram, options.k, options.nthreads, options.tmp_dir, options.output_filename);
+}
 
 GGCAT::~GGCAT() 
 {
@@ -19,17 +21,8 @@ GGCAT::~GGCAT()
 }
 
 void 
-GGCAT::build(std::string const& filenames_list, uint64_t mem_gigas, uint64_t k, uint64_t num_threads, std::string const& tmp_dirname, std::string const& output_basename) 
+GGCAT::build(opt_t::fn_t const& filenames_list, uint64_t mem_gigas, uint64_t k, uint64_t num_threads, std::string const& tmp_dirname, std::string const& output_basename)
 {
-    {
-        std::ifstream in(filenames_list);
-        if (!in.is_open()) throw std::runtime_error("error in opening file");
-        std::string filename;
-        while (in >> filename) m_filenames.push_back(filename);
-        std::cerr << "about to process " << m_filenames.size() << " files...\n";
-        in.close();
-    }
-
     m_output_filename = output_basename;
     m_graph_file = output_basename + ".ggcat.fa";
     m_k = k;
@@ -51,15 +44,22 @@ GGCAT::build(std::string const& filenames_list, uint64_t mem_gigas, uint64_t k, 
     m_instance = ggcat::GGCATInstance::create(config);
 
     std::vector<std::string> color_names;
-    color_names.reserve(m_filenames.size());
-    for (uint64_t i = 0; i != m_filenames.size(); ++i) color_names.push_back(std::to_string(i));
+    color_names.reserve(filenames_list.size());
+    for (uint64_t i = 0; i != filenames_list.size(); ++i) color_names.push_back(std::to_string(i));
 
     constexpr bool forward_only = false;
     constexpr bool output_colors = true;
     constexpr size_t min_multiplicity = 1;
     m_instance->build_graph_from_files(
-        ggcat::Slice<std::string>(m_filenames.data(), m_filenames.size()), 
-        m_graph_file, m_k, num_threads, forward_only, min_multiplicity, ggcat::ExtraElaborationStep_UnitigLinks, output_colors, 
+        ggcat::Slice<std::string>(const_cast<std::string*>(filenames_list.data()), // ATTENTION: const_cast
+        filenames_list.size()), 
+        m_graph_file, 
+        m_k, 
+        num_threads, 
+        forward_only, 
+        min_multiplicity, 
+        ggcat::ExtraElaborationStep_UnitigLinks, 
+        output_colors, 
         ggcat::Slice<std::string>(color_names.data(), color_names.size())
     );
 }
@@ -71,22 +71,10 @@ GGCAT::loop_through_unitigs(
         ggcat::Slice<uint32_t> const /* colors */, 
         bool /* same_color */
     )> callback,
-    uint64_t num_threads = 1) const 
+    uint64_t num_threads) const 
 {
     if (m_k == 0) throw std::runtime_error("graph must be built first");
     m_instance->dump_unitigs(m_graph_file, m_k, num_threads, num_threads == 1, callback, true);
-}
-
-uint64_t 
-GGCAT::num_docs() const 
-{ 
-    return m_filenames.size(); 
-}
-
-std::vector<std::string> const& 
-GGCAT::filenames() const 
-{
-    return m_filenames;
 }
 
 }

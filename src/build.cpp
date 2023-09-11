@@ -1,19 +1,21 @@
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include "../include/constants.hpp"
 #include "../include/build.hpp"
 #include "../include/index.hpp"
+#include "../include/hybrid.hpp"
 
 namespace kaminari {
 
-index::opt_t check_args(const argparse::ArgumentParser& parser);
+opt_t check_args(const argparse::ArgumentParser& parser);
 
 int build_main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    index idx(opts);
-    
+    index<color_classes::hybrid> idx(opts);
+    return 0;
 }
 
 argparse::ArgumentParser get_parser_build()
@@ -29,11 +31,11 @@ argparse::ArgumentParser get_parser_build()
         .default_value("");
     parser.add_argument("-k")
         .help("k-mer length")
-        .scan<'u', std::size_t>()
+        .scan<'u', uint64_t>()
         .required();
     parser.add_argument("-m")
         .help("minimizer length (must be < k)")
-        .scan<'u', std::size_t>()
+        .scan<'u', uint64_t>()
         .required();
     parser.add_argument("-t", "--threads")
         .help("number of threads")
@@ -57,11 +59,23 @@ argparse::ArgumentParser get_parser_build()
     return parser;
 }
 
-index::opt_t check_args(const argparse::ArgumentParser& parser)
+opt_t::fn_t read_filenames(std::string const& filenames_list) 
 {
-    index::opt_t opts;
+    opt_t::fn_t buffer;
+    std::ifstream in(filenames_list);
+    if (!in.is_open()) throw std::runtime_error("error in opening file");
+    std::string filename;
+    while (in >> filename) buffer.push_back(filename);
+    std::cerr << "about to process " << buffer.size() << " files...\n";
+    in.close();
+    return buffer;
+}
+
+opt_t check_args(const argparse::ArgumentParser& parser)
+{
+    opt_t opts;
     std::size_t tmp;
-    opts.input_filenames = parser.get<index::opt_t::fn_t>("-i");
+    opts.input_filenames = parser.get<opt_t::fn_t>("-i");
     opts.output_filename = parser.get<std::string>("-o");
     opts.tmp_dir = parser.get<std::string>("--tmp-dir");
     
@@ -81,6 +95,8 @@ index::opt_t check_args(const argparse::ArgumentParser& parser)
 
     opts.check = parser.get<bool>("--check");
     opts.verbose = parser.get<bool>("--verbose");
+
+    if (opts.input_filenames.size() == 1) opts.input_filenames = read_filenames(opts.input_filenames.at(0));
 
     return opts;
 }

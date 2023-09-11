@@ -51,19 +51,32 @@ include_directories(${PROJECT_SOURCE_DIR})
 add_custom_target(
    ggcat_cpp_api
    COMMAND make
-   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/ggcat/crates/capi/ggcat-cpp-api
+   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api
 )
-set(GGCAT_CPP_BINDINGS ${CMAKE_SOURCE_DIR}/external/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_cpp_bindings.a)
-set(GGCAT_CXX_INTEROP ${CMAKE_SOURCE_DIR}/external/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_cxx_interop.a)
-set(GGCAT_API ${CMAKE_SOURCE_DIR}/external/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_api.a)
+set(GGCAT_CPP_BINDINGS ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_cpp_bindings.a)
+set(GGCAT_CXX_INTEROP ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_cxx_interop.a)
+set(GGCAT_API ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_api.a)
 
 ## kaminari 
 set(KAMINARI_SOURCES
   src/build.cpp
+  src/GGCAT.cpp
+  src/hybrid.cpp
+  src/index.cpp
 )
 
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
-target_link_libraries(kaminari argparse)
+add_dependencies(kaminari ggcat_cpp_api) # lphash_static
+target_link_libraries(kaminari
+  # sshash_static
+  argparse
+  z
+  ${GGCAT}
+  ${GGCAT_API}
+  ${GGCAT_CPP_BINDINGS}
+  ${GGCAT_CXX_INTEROP}
+  ${CMAKE_DL_LIBS}
+)
 
 #----------------------------- Tests ----------------------------
