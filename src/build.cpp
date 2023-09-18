@@ -6,6 +6,7 @@
 #include "../include/build.hpp"
 #include "../include/index.hpp"
 #include "../include/hybrid.hpp"
+#include "../include/array_mapper.hpp"
 
 namespace kaminari {
 
@@ -14,7 +15,13 @@ opt_t check_args(const argparse::ArgumentParser& parser);
 int build_main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    index<color_classes::hybrid> idx(opts);
+    index<color_classes::hybrid, array_mapper<lphash_mphf_t>> idx(opts);
+    if (opts.output_filename != "") {
+        std::ofstream out(opts.output_filename, std::ios::binary);
+        saver saver(out);
+        idx.visit(saver);
+        if (opts.verbose) std::cerr << "Written " + std::to_string(saver.get_byte_size()) + " Bytes\n";
+    }
     return 0;
 }
 
@@ -31,16 +38,16 @@ argparse::ArgumentParser get_parser_build()
         .default_value("");
     parser.add_argument("-k")
         .help("k-mer length")
-        .scan<'u', uint64_t>()
+        .scan<'u', std::size_t>()
         .required();
     parser.add_argument("-m")
         .help("minimizer length (must be < k)")
-        .scan<'u', uint64_t>()
+        .scan<'u', std::size_t>()
         .required();
     parser.add_argument("-t", "--threads")
         .help("number of threads")
         .scan<'u', std::size_t>()
-        .default_value(1);
+        .default_value(std::size_t(1));
     parser.add_argument("-d", "--tmp-dir")
         .help("temporary directory")
         .default_value(std::string("."));
@@ -88,7 +95,7 @@ opt_t check_args(const argparse::ArgumentParser& parser)
     opts.m = static_cast<decltype(opts.m)>(tmp);
 
     tmp = std::min(parser.get<std::size_t>("-t"), std::size_t(std::thread::hardware_concurrency()));
-    opts.nthreads = static_cast<decltype(opts.nthreads)>(tmp);
+    opts.nthreads = static_cast<decltype(opts.nthreads) > (tmp);
 
     tmp = parser.get<std::size_t>("--max-ram");
     opts.max_ram = tmp;

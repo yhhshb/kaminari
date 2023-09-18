@@ -58,18 +58,44 @@ set(GGCAT_CXX_INTEROP ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-ap
 set(GGCAT_API ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_api.a)
 
 ## kaminari 
+
+set(BIOLIB_SOURCES
+  bundled/biolib/src/io.cpp
+  bundled/biolib/src/elias_fano.cpp
+  bundled/biolib/src/kmer_view.cpp
+  bundled/biolib/src/logtools.cpp
+)
+
+set(LPHASH_SOURCES
+  bundled/lphash/lib/src/constants.cpp
+  bundled/lphash/lib/src/minimizer.cpp
+  bundled/lphash/lib/src/mphf.cpp
+  bundled/lphash/lib/src/partitioned_mphf.cpp
+  bundled/lphash/lib/src/quartet_wtree.cpp
+  bundled/lphash/lib/src
+)
+
 set(KAMINARI_SOURCES
   src/build.cpp
   src/GGCAT.cpp
   src/hybrid.cpp
-  src/index.cpp
+)
+
+add_library(biolib_static STATIC
+  ${BIOLIB_SOURCES}
+)
+
+# Create a static lib for LPHash
+add_library(lphash_static STATIC
+  ${LPHASH_SOURCES}
 )
 
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
-add_dependencies(kaminari ggcat_cpp_api) # lphash_static
+add_dependencies(kaminari ggcat_cpp_api lphash_static biolib_static)
 target_link_libraries(kaminari
-  # sshash_static
+  biolib_static
+  lphash_static
   argparse
   z
   ${GGCAT}

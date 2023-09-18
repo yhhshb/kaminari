@@ -9,8 +9,6 @@ namespace color_classes {
 class hybrid
 {
     public:
-        // static std::string type() { return "hybrid"; }
-
         enum list_type { 
             delta_gaps = 0,
             bitmap = 1,
@@ -20,7 +18,7 @@ class hybrid
         class builder
         {
             public:
-                builder(std::size_t number_of_documents);
+                builder(std::size_t number_of_documents, bool verbose = false);
                 void add_color_set(uint32_t* const colors, uint64_t list_size);
                 void build(hybrid& index);
 
@@ -30,6 +28,7 @@ class hybrid
                 uint32_t m_very_dense_set_threshold_size;
                 uint64_t m_num_lists;
                 uint64_t m_num_total_integers;
+                bool verbose;
 
                 bit_vector m_bvb;
                 std::vector<uint64_t> m_offsets;
@@ -71,6 +70,7 @@ class hybrid
                 void next_geq_comp_val(uint64_t lower_bound);
         };
 
+        hybrid();
         iterator colors(uint64_t color_class_id) const;
         std::size_t num_docs() const;
         std::size_t num_color_classes() const;
@@ -91,9 +91,9 @@ class hybrid
         uint32_t m_num_docs;
         uint32_t m_sparse_set_threshold_size;
         uint32_t m_very_dense_set_threshold_size;
-        //sshash::ef_sequence<false> m_offsets;
         ef_sequence m_offsets;
         bit_vector m_colors;
+        bool verbose;
 };
 
 } // namespace color_classes 

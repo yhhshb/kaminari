@@ -1,5 +1,5 @@
 #include <string>
-#include <iostream>
+// #include <iostream>
 #include <numeric>
 #include <cassert>
 
@@ -8,8 +8,15 @@
 namespace kaminari {
 namespace color_classes {
 
-hybrid::builder::builder(std::size_t number_of_documents)
-    : m_num_docs(number_of_documents), m_num_lists(0), m_num_total_integers(0)
+hybrid::hybrid() 
+    : m_num_docs(0), 
+      m_sparse_set_threshold_size(0), 
+      m_very_dense_set_threshold_size(0),
+      m_offsets(dummy_itr_t(0), 0 , 0)
+{}
+
+hybrid::builder::builder(std::size_t number_of_documents, bool verb)
+    : m_num_docs(number_of_documents), m_num_lists(0), m_num_total_integers(0), verbose(verb)
 {
     // if list contains < sparse_set_threshold_size ints, code it with gaps+delta
     m_sparse_set_threshold_size = 0.25 * m_num_docs;
@@ -21,23 +28,31 @@ hybrid::builder::builder(std::size_t number_of_documents)
     // m_bvb.reserve(8 * essentials::GB);
     m_offsets.push_back(0);
 
-    std::cerr << "m_num_docs: " << m_num_docs << "\n"
-              << "m_sparse_set_threshold_size " << m_sparse_set_threshold_size << "\n" 
-              << "m_very_dense_set_threshold_size " << m_very_dense_set_threshold_size << "\n";
+    if (verbose) {
+        std::cerr << "m_num_docs: " << m_num_docs << "\n"
+                << "m_sparse_set_threshold_size " << m_sparse_set_threshold_size << "\n" 
+                << "m_very_dense_set_threshold_size " << m_very_dense_set_threshold_size << "\n";
+    }
 }
 
 void 
 hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size) 
 {
     /* encode list_size */
+    std::cerr << "before delta (0)\n";
     bit::encoder::delta(m_bvb, list_size);
+    std::cerr << "after delta (0)\n";
     if (list_size < m_sparse_set_threshold_size) {
         uint32_t prev_val = colors[0];
+        std::cerr << "before delta (1)\n";
         bit::encoder::delta(m_bvb, prev_val);
+        std::cerr << "before delta (1)\n";
         for (std::size_t i = 1; i != list_size; ++i) {
             uint32_t val = colors[i];
             assert(val >= prev_val + 1);
+            std::cerr << "before delta (2)\n";
             bit::encoder::delta(m_bvb, val - (prev_val + 1));
+            std::cerr << "before delta (2)\n";
             prev_val = val;
         }
     } else if (list_size < m_very_dense_set_threshold_size) {
@@ -47,7 +62,11 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
         // m_bvb.append(bvb_ints);
         auto old_size = m_bvb.size();
         m_bvb.resize(old_size + m_num_docs);
-        for (std::size_t i = 0; i != list_size; ++i) m_bvb.set(old_size + colors[i]);
+        for (std::size_t i = 0; i != list_size; ++i) {
+            std::cerr << "before set\n";
+            m_bvb.set(old_size + colors[i]);
+            std::cerr << "after set\n";
+        }
     } else {
         bool first = true;
         uint32_t val = 0;
@@ -57,12 +76,16 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
             uint32_t x = colors[i];
             while (val < x) {
                 if (first) {
+                    std::cerr << "before delta (3)\n";
                     bit::encoder::delta(m_bvb, val);
+                    std::cerr << "before delta (3)\n";
                     first = false;
                     ++written;
                 } else {
                     assert(val >= prev_val + 1);
+                    std::cerr << "before delta (4)\n";
                     bit::encoder::delta(m_bvb, val - (prev_val + 1));
+                    std::cerr << "before delta (4)\n";
                     ++written;
                 }
                 prev_val = val;
@@ -73,7 +96,9 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
         }
         while (val < m_num_docs) {
             assert(val >= prev_val + 1);
+            std::cerr << "before delta (5)\n";
             bit::encoder::delta(m_bvb, val - (prev_val + 1));
+            std::cerr << "before delta (5)\n";
             prev_val = val;
             ++val;
             ++written;
@@ -86,7 +111,7 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
     m_offsets.push_back(m_bvb.size());
     m_num_total_integers += list_size;
     m_num_lists += 1;
-    if (m_num_lists % 500000 == 0) std::cerr << "  processed " << m_num_lists << " lists" << std::endl;
+    if (verbose and (m_num_lists % 500000 == 0)) std::cerr << "  processed " << m_num_lists << " lists" << std::endl;
 }
 
 void 
@@ -101,13 +126,15 @@ hybrid::builder::build(hybrid& h)
     h.m_offsets = ef_sequence(m_offsets.begin(), m_offsets.size(), m_offsets.back());
     h.m_colors.swap(m_bvb);
 
-    std::cerr << "processed " << m_num_lists << " lists\n" 
-              << "m_num_total_integers " << m_num_total_integers << "\n" 
-              << "  total bits for ints = " << h.m_colors.size() << "\n" 
-              << "  total bits per offsets = " << h.m_offsets.bit_size() << "\n" 
-              << "  total bits = " << h.m_offsets.bit_size() + h.m_colors.size() << "n" 
-              << "  offsets: " << static_cast<double>(h.m_offsets.bit_size()) / m_num_total_integers << " bits/int\n" 
-              << "  lists: " << static_cast<double>(h.m_colors.size()) / m_num_total_integers << " bits/int\n";
+    if (verbose) {
+        std::cerr << "processed " << m_num_lists << " lists\n" 
+                << "m_num_total_integers " << m_num_total_integers << "\n" 
+                << "  total bits for ints = " << h.m_colors.size() << "\n" 
+                << "  total bits per offsets = " << h.m_offsets.bit_size() << "\n" 
+                << "  total bits = " << h.m_offsets.bit_size() + h.m_colors.size() << "n" 
+                << "  offsets: " << static_cast<double>(h.m_offsets.bit_size()) / m_num_total_integers << " bits/int\n" 
+                << "  lists: " << static_cast<double>(h.m_colors.size()) / m_num_total_integers << " bits/int\n";
+    }
 }
 
 hybrid::iterator::iterator(hybrid const& ptr, uint64_t begin)
@@ -344,7 +371,7 @@ hybrid::print_stats() const
         num_total_integers += list_size;
     }
 
-    std::cerr << "CCs SPACE BREAKDOWN:\n";
+    if (verbose) std::cerr << "CCs SPACE BREAKDOWN:\n";
     uint64_t integers = 0;
     uint64_t bits = 0;
     const uint64_t total_bits = num_bits();
@@ -355,29 +382,33 @@ hybrid::print_stats() const
             uint64_t n = num_ints_per_bucket[i];
             integers += n;
             bits += num_bits_per_bucket[i];
-            std::cerr   << "num. lists of size > " 
-                        << (curr_list_size_upper_bound - bucket_size)
-                        << " and <= " 
-                        << curr_list_size_upper_bound 
-                        << ": "
-                        << num_lists_per_bucket[i] 
-                        << " ("
-                        << (num_lists_per_bucket[i] * 100.0) / num_lists
-                        << "%) -- integers: " 
-                        << n 
-                        << " (" << (n * 100.0) / num_total_integers
-                        << "%) -- bits/int: " << static_cast<double>(num_bits_per_bucket[i]) / n
-                        << " -- "
-                        << static_cast<double>(num_bits_per_bucket[i]) / total_bits * 100.0
-                        << "\% of total space" << '\n';
+            if (verbose) {
+                std::cerr   << "num. lists of size > " 
+                            << (curr_list_size_upper_bound - bucket_size)
+                            << " and <= " 
+                            << curr_list_size_upper_bound 
+                            << ": "
+                            << num_lists_per_bucket[i] 
+                            << " ("
+                            << (num_lists_per_bucket[i] * 100.0) / num_lists
+                            << "%) -- integers: " 
+                            << n 
+                            << " (" << (n * 100.0) / num_total_integers
+                            << "%) -- bits/int: " << static_cast<double>(num_bits_per_bucket[i]) / n
+                            << " -- "
+                            << static_cast<double>(num_bits_per_bucket[i]) / total_bits * 100.0
+                            << "\% of total space" << '\n';
+            }
         }
     }
     assert(integers == num_total_integers);
     assert(std::accumulate(num_lists_per_bucket.begin(), num_lists_per_bucket.end(), uint64_t(0)) == num_lists);
-    std::cerr << "  colors: " << static_cast<double>(bits) / integers << " bits/int\n"
-              << "  offsets: "
-              << static_cast<double>((sizeof(m_num_docs) + sizeof(m_sparse_set_threshold_size) + sizeof(m_very_dense_set_threshold_size)) * 8 + m_offsets.bit_size()) / integers
-              << " bits/int\n";
+    if (verbose) {
+        std::cerr << "  colors: " << static_cast<double>(bits) / integers << " bits/int\n"
+                << "  offsets: "
+                << static_cast<double>((sizeof(m_num_docs) + sizeof(m_sparse_set_threshold_size) + sizeof(m_very_dense_set_threshold_size)) * 8 + m_offsets.bit_size()) / integers
+                << " bits/int\n";
+    }
 }
 
 } // namespace color_classes 
