@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include "../bundled/biolib/include/kmer_view.hpp"
 #include "constants.hpp"
 #include "GGCAT.hpp"
@@ -13,6 +15,11 @@ class array_mapper
         array_mapper() {}
         void build(MPHF const& hf, GGCAT& cdbg);
         uint32_t at(std::size_t kmer_idx) const;
+        std::map<std::size_t, std::size_t> get_histogram() const noexcept;
+        const std::vector<std::size_t>& vector_data() const noexcept {return map;}
+
+        template <class Visitor>
+        void visit(Visitor& visitor) const;
 
         template <class Visitor>
         void visit(Visitor& visitor);
@@ -53,6 +60,26 @@ uint32_t
 array_mapper<MPHF>::at(std::size_t kmer_idx) const
 {
     return map.at(kmer_idx);
+}
+
+template <class MPHF>
+std::map<std::size_t, std::size_t> 
+array_mapper<MPHF>::get_histogram() const noexcept
+{
+    std::map<std::size_t, std::size_t> hist;
+    for (auto v : map) {
+        if (hist.find(v) == hist.end()) hist[v] = 1;
+        else hist[v] += 1;
+    } 
+    return hist;
+}
+
+template <class MPHF>
+template <class Visitor>
+void 
+array_mapper<MPHF>::visit(Visitor& visitor) const
+{
+    visitor.visit(map);
 }
 
 template <class MPHF>

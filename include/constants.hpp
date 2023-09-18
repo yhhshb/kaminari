@@ -10,6 +10,7 @@
 #include "../bundled/biolib/include/external_memory_vector.hpp"
 #include "../bundled/biolib/include/counting_iterator.hpp"
 #include "../bundled/biolib/include/io.hpp"
+#include "../bundled/biolib/include/logtools.hpp"
 #include "../bundled/lphash/lib/include/partitioned_mphf.hpp"
 #include "../bundled/lphash/main/include/constants.hpp"
 
@@ -23,6 +24,8 @@ typedef emem::external_memory_vector<uint32_t, false> emem_colors;
 typedef iterators::counting_iterator<uint32_t> dummy_itr_t;
 typedef io::mut_saver saver;
 typedef io::loader loader;
+typedef logging_tools::libra libra;
+
 typedef lphash::mphf::partitioned lphash_mphf_t;
 typedef lphash::mphf::interface::configuration lphash_configuration_t;
 

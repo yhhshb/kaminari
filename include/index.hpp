@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <iostream>
 #include "constants.hpp"
 #include "GGCAT.hpp"
 
@@ -13,6 +14,10 @@ class index
 {
     public:
         index(const opt_t& build_parameters);
+
+        void memory_breakdown(std::ostream& out) const noexcept;
+        void print_map_histogram(std::ostream& out) const noexcept;
+        void print_map(std::ostream& out) const noexcept;
 
         template <class Visitor>
         void visit(Visitor& visitor);
@@ -127,6 +132,44 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
             },
             build_parameters.nthreads);
         std::cerr << "Checking done\n";
+    }
+}
+
+template <class ColorClasses, class ColorMapper>
+void 
+index<ColorClasses, ColorMapper>::memory_breakdown(std::ostream& out) const noexcept
+{
+    libra scale;
+    scale.visit(m_map);
+    out << "Mapping k-mers to colors weights: " << scale.get_byte_size() << " Bytes";
+}
+
+template <class ColorClasses, class ColorMapper>
+void 
+index<ColorClasses, ColorMapper>::print_map_histogram(std::ostream& out) const noexcept
+{
+    auto map_hist = m_map.get_histogram();
+    std::size_t val_sum = 0;
+    for (auto itr = map_hist.begin(); itr != map_hist.end(); ++itr) {
+        val_sum += itr->second;
+    }
+    double entropy = 0;
+    for (auto itr = map_hist.begin(); itr != map_hist.end(); ++itr) {
+        double p = double(itr->second) / val_sum;
+        entropy += p * std::log2(p);
+    }
+    out << "H_0," << -entropy << "\n";
+    for (auto itr = map_hist.begin(); itr != map_hist.end(); ++itr) {
+        out << itr->first << "," << itr->second << "\n";
+    }
+}
+
+template <class ColorClasses, class ColorMapper>
+void 
+index<ColorClasses, ColorMapper>::print_map(std::ostream& out) const noexcept
+{
+    for (auto itr = m_map.vector_data().cbegin(); itr != m_map.vector_data().cend(); ++itr) {
+        out << *itr << "\n";
     }
 }
 

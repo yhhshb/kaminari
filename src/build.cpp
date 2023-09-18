@@ -16,6 +16,15 @@ int build_main(const argparse::ArgumentParser& parser)
 {
     auto opts = check_args(parser);
     index<color_classes::hybrid, array_mapper<lphash_mphf_t>> idx(opts);
+    {
+        std::ofstream m("map_dump.txt");
+        idx.print_map(m);
+    }
+    if (opts.verbose) {
+        idx.print_map_histogram(std::cerr);
+        idx.memory_breakdown(std::cerr);
+        std::cerr << "\n";
+    }
     if (opts.output_filename != "") {
         std::ofstream out(opts.output_filename, std::ios::binary);
         saver saver(out);
