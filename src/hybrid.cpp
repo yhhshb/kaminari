@@ -39,20 +39,14 @@ void
 hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size) 
 {
     /* encode list_size */
-    std::cerr << "before delta (0)\n";
     bit::encoder::delta(m_bvb, list_size);
-    std::cerr << "after delta (0)\n";
     if (list_size < m_sparse_set_threshold_size) {
         uint32_t prev_val = colors[0];
-        std::cerr << "before delta (1)\n";
         bit::encoder::delta(m_bvb, prev_val);
-        std::cerr << "before delta (1)\n";
         for (std::size_t i = 1; i != list_size; ++i) {
             uint32_t val = colors[i];
             assert(val >= prev_val + 1);
-            std::cerr << "before delta (2)\n";
             bit::encoder::delta(m_bvb, val - (prev_val + 1));
-            std::cerr << "before delta (2)\n";
             prev_val = val;
         }
     } else if (list_size < m_very_dense_set_threshold_size) {
@@ -63,9 +57,7 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
         auto old_size = m_bvb.size();
         m_bvb.resize(old_size + m_num_docs);
         for (std::size_t i = 0; i != list_size; ++i) {
-            std::cerr << "before set\n";
             m_bvb.set(old_size + colors[i]);
-            std::cerr << "after set\n";
         }
     } else {
         bool first = true;
@@ -76,16 +68,12 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
             uint32_t x = colors[i];
             while (val < x) {
                 if (first) {
-                    std::cerr << "before delta (3)\n";
                     bit::encoder::delta(m_bvb, val);
-                    std::cerr << "before delta (3)\n";
                     first = false;
                     ++written;
                 } else {
                     assert(val >= prev_val + 1);
-                    std::cerr << "before delta (4)\n";
                     bit::encoder::delta(m_bvb, val - (prev_val + 1));
-                    std::cerr << "before delta (4)\n";
                     ++written;
                 }
                 prev_val = val;
@@ -96,9 +84,7 @@ hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size)
         }
         while (val < m_num_docs) {
             assert(val >= prev_val + 1);
-            std::cerr << "before delta (5)\n";
             bit::encoder::delta(m_bvb, val - (prev_val + 1));
-            std::cerr << "before delta (5)\n";
             prev_val = val;
             ++val;
             ++written;

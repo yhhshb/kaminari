@@ -39,16 +39,16 @@ array_mapper<MPHF>::build(MPHF const& hf, GGCAT& cdbg)
     cdbg.loop_through_unitigs(
         [&](ggcat::Slice<char> const unitig, ggcat::Slice<uint32_t> const colors, bool same_color) 
         {
-            try {
+            // try {
                 if (!same_color) {
                     ++color_class_id; // color_id
                 }
                 auto hash_values = hf(unitig.data, unitig.size, true);
                 for (auto v : hash_values) uncompressed_map[v] = color_class_id;
-            } catch (std::exception const& e) {
-                std::cerr << e.what() << std::endl;
-                exit(1);
-            }
+            // } catch (std::exception const& e) {
+            //     std::cerr << e.what() << std::endl;
+            //     exit(1);
+            // }
         }
     );
     

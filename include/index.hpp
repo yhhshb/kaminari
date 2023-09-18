@@ -49,38 +49,34 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
         if (build_parameters.verbose) std::cerr << "step 1. building u2c and m_ccs\n";
         std::size_t num_unitigs = 0;
         std::size_t num_distinct_colors = 0;
-        // bit_vector bvb;  // for m_u2c
 
         std::ofstream out(tmp_fasta_input.c_str()); // FIXME: write unitigs to fasta file for lpHash 
-        if (!out.is_open()) throw std::runtime_error("cannot open output file");
+        if (not out.is_open()) throw std::runtime_error("cannot open output file");
 
         typename ColorClasses::builder colors_builder(m_filenames.size(), build_parameters.verbose);
 
         ggreader.loop_through_unitigs(
             [&](ggcat::Slice<char> const unitig, ggcat::Slice<uint32_t> const colors, bool same_color) 
             {
-                try {
-                    if (!same_color) {
+                // try {
+                    if (not same_color) {
                         ++num_distinct_colors; // color_id
-                        // if (num_unitigs > 0) bvb.set(num_unitigs - 1, 1);
                         colors_builder.add_color_set(colors.data, colors.size); // compress colors
                     }
-                    // bvb.push_back(0);
                     out << ">\n";
                     out.write(unitig.data, unitig.size);
                     out << '\n';
                     num_unitigs += 1;
-                } catch (std::exception const& e) {
-                    std::cerr << e.what() << std::endl;
-                    exit(1);
-                }
+                // } catch (std::exception const& e) {
+                //     std::cerr << e.what() << std::endl;
+                //     exit(1);
+                // }
             }
         );
         out.close();
 
         if (num_unitigs > std::numeric_limits<uint32_t>::max()) 
             throw std::runtime_error("Number of unitigs > than allowed maximum of " + std::to_string(std::numeric_limits<uint32_t>::max()));
-        // m_u2c = ranked_bit_vector(std::move(bvb));
         colors_builder.build(m_ccs);
 
         if (build_parameters.verbose) {
@@ -109,29 +105,25 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
 
     if (build_parameters.check) {
         std::cerr << "step 4. check correctness...\n";
+        std::size_t color_class_id = 0;
         ggreader.loop_through_unitigs(
             [&](ggcat::Slice<char> const unitig, 
                 ggcat::Slice<uint32_t> const colors,
-                bool) // everything has the same color
+                bool same_color) // everything has the same color
             {
-                // TODO
-                // auto lookup_result = m_k2u.lookup_advanced(unitig.data);
-                // uint32_t unitig_id = lookup_result.contig_id;
-                // uint32_t color_id = u2c(unitig_id);
-                // for (std::size_t i = 1; i != unitig.size - m_k2u.k() + 1; ++i) {
-                //     uint32_t got = m_k2u.lookup_advanced(unitig.data + i).contig_id;
-                //     if (got != unitig_id) throw std::runtime_error("got unitig_id " + std::to_string(got) + " but expected " + std::to_string(unitig_id));
-                // }
-                // auto fwd_it = m_ccs.colors(color_id);
-                // uint64_t size = fwd_it.size();
-                // if (size != colors.size) throw std::runtime_error("got colors list of size " + std::to_string(size) + " but expected " + std::to_string(colors.size));
-                // for (uint64_t i = 0; i != size; ++i, ++fwd_it) {
-                //     uint32_t ref = *fwd_it;
-                //     if (ref != colors.data[i]) throw std::runtime_error("got ref " + std::to_string(ref) + " but expected " + std::to_string(colors.data[i]));
+                // try {
+                    if (not same_color) ++color_class_id;
+                    auto hash_values = hf(unitig.data, unitig.size, true);
+                    for (auto v : hash_values) if (m_map.at(v) != color_class_id) {
+                        throw std::runtime_error("Check FAIL");
+                    }
+                // } catch (std::excpetion const& e) {
+                //     std::cerr << e.what() << std::endl;
+                //     exit(1);
                 // }
             },
             build_parameters.nthreads);
-        std::cerr << "Checking done\n";
+        std::cerr << "Checking done. Everything OK\n";
     }
 }
 
