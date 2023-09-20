@@ -1,4 +1,5 @@
-#pragma once
+#ifndef KAMINARI_COLOR_CLASSES_HYBRID_HPP
+#define KAMINARI_COLOR_CLASSES_HYBRID_HPP
 
 #include <vector>
 #include "constants.hpp"
@@ -98,3 +99,5 @@ class hybrid
 
 } // namespace color_classes 
 } // namespace kaminari
+
+#endif // KAMINARI_COLOR_CLASSES_HYBRID_HPP

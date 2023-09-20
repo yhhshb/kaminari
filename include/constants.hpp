@@ -1,4 +1,5 @@
-#pragma once
+#ifndef KAMINARI_CONSTANTS_HPP
+#define KAMINARI_CONSTANTS_HPP
 
 #include <cstddef>
 #include "compile_constants.tdp"
@@ -49,3 +50,5 @@ static const auto lphash_c = lphash::constants::c;
 
 }
 }
+
+#endif // KAMINARI_CONSTANTS_HPP

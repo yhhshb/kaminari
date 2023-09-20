@@ -15,7 +15,7 @@ opt_t check_args(const argparse::ArgumentParser& parser);
 int build_main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    index<color_classes::hybrid, array_mapper<lphash_mphf_t>> idx(opts);
+    index<color_classes::hybrid, mapper::array_based<lphash_mphf_t>> idx(opts);
     {
         std::ofstream m("map_dump.txt");
         idx.print_map(m);
