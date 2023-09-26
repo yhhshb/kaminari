@@ -6,7 +6,8 @@ namespace mapper {
 
 class union_based
 {
-
+    public:
+    private:
 };
 
 } // namespace mapper
