@@ -58,19 +58,14 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
         ggreader.loop_through_unitigs(
             [&](ggcat::Slice<char> const unitig, ggcat::Slice<uint32_t> const colors, bool same_color) 
             {
-                // try {
-                    if (not same_color) {
-                        ++num_distinct_colors; // color_id
-                        colors_builder.add_color_set(colors.data, colors.size); // compress colors
-                    }
-                    out << ">\n";
-                    out.write(unitig.data, unitig.size);
-                    out << '\n';
-                    num_unitigs += 1;
-                // } catch (std::exception const& e) {
-                //     std::cerr << e.what() << std::endl;
-                //     exit(1);
-                // }
+                if (not same_color) {
+                    ++num_distinct_colors; // color_id
+                    colors_builder.add_color_set(colors.data, colors.size); // compress colors
+                }
+                out << ">\n";
+                out.write(unitig.data, unitig.size);
+                out << '\n';
+                num_unitigs += 1;
             }
         );
         out.close();
@@ -111,16 +106,11 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
                 ggcat::Slice<uint32_t> const colors,
                 bool same_color) // everything has the same color
             {
-                // try {
-                    if (not same_color) ++color_class_id;
-                    auto hash_values = hf(unitig.data, unitig.size, true);
-                    for (auto v : hash_values) if (m_map.at(v) != color_class_id) {
-                        throw std::runtime_error("Check FAIL");
-                    }
-                // } catch (std::excpetion const& e) {
-                //     std::cerr << e.what() << std::endl;
-                //     exit(1);
-                // }
+                if (not same_color) ++color_class_id;
+                auto hash_values = hf(unitig.data, unitig.size, true);
+                for (auto v : hash_values) if (m_map.at(v) != color_class_id) {
+                    throw std::runtime_error("Check FAIL");
+                }
             },
             build_parameters.nthreads);
         std::cerr << "Checking done. Everything OK\n";
@@ -156,14 +146,14 @@ index<ColorClasses, ColorMapper>::print_map_histogram(std::ostream& out) const n
     }
 }
 
-template <class ColorClasses, class ColorMapper>
-void 
-index<ColorClasses, ColorMapper>::print_map(std::ostream& out) const noexcept
-{
-    for (auto itr = m_map.vector_data().cbegin(); itr != m_map.vector_data().cend(); ++itr) {
-        out << *itr << "\n";
-    }
-}
+// template <class ColorClasses, class ColorMapper>
+// void 
+// index<ColorClasses, ColorMapper>::print_map(std::ostream& out) const noexcept
+// {
+//     for (auto itr = m_map.vector_data().cbegin(); itr != m_map.vector_data().cend(); ++itr) {
+//         out << *itr << "\n";
+//     }
+// }
 
 template <class ColorClasses, class ColorMapper>
 lphash_configuration_t 
