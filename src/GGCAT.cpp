@@ -23,6 +23,13 @@ GGCAT::~GGCAT()
 void 
 GGCAT::build(opt_t::fn_t const& filenames_list, uint64_t mem_gigas, uint64_t k, uint64_t num_threads, std::string const& tmp_dirname, std::string const& output_basename)
 {
+    int backup, redirect;
+    fflush(stdout);
+    backup = dup(1);
+    redirect = open("/dev/null", O_WRONLY);
+    dup2(redirect, 1);
+    close(redirect);
+
     m_output_filename = output_basename;
     m_graph_file = output_basename + ".ggcat.fa";
     m_k = k;
@@ -62,6 +69,9 @@ GGCAT::build(opt_t::fn_t const& filenames_list, uint64_t mem_gigas, uint64_t k, 
         output_colors, 
         ggcat::Slice<std::string>(color_names.data(), color_names.size())
     );
+    fflush(stdout);
+    dup2(backup, 1);
+    close(backup);
 }
 
 void 
@@ -73,8 +83,19 @@ GGCAT::loop_through_unitigs(
     )> callback,
     uint64_t num_threads) const 
 {
+    int backup, redirect;
+    fflush(stdout);
+    backup = dup(1);
+    redirect = open("/dev/null", O_WRONLY);
+    dup2(redirect, 1);
+    close(redirect);
+
     if (m_k == 0) throw std::runtime_error("graph must be built first");
     m_instance->dump_unitigs(m_graph_file, m_k, num_threads, num_threads == 1, callback, true);
+
+    fflush(stdout);
+    dup2(backup, 1);
+    close(backup);
 }
 
 }

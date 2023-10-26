@@ -95,7 +95,7 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
 
     { // step 3
         if (build_parameters.verbose) std::cerr << "step 3. build mapping from k-mers to colors\n";
-        m_map.build(hf, ggreader);
+        m_map.build(hf, ggreader, build_parameters.verbose);
     }
 
     if (build_parameters.check) {
@@ -108,8 +108,14 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
             {
                 if (not same_color) ++color_class_id;
                 auto hash_values = hf(unitig.data, unitig.size, true);
-                for (auto v : hash_values) if (m_map.at(v) != color_class_id) {
-                    throw std::runtime_error("Check FAIL");
+                
+                for (auto v : hash_values) {
+                    // std::cerr << "hash value " << v << "\n";
+                    auto cc = m_map.at(v);
+                    // std::cerr << " with color class id = " << cc << " (true color class = " << color_class_id << ")\n";
+                    if (cc != color_class_id) {
+                        throw std::runtime_error("Check FAIL");
+                    }
                 }
             },
             build_parameters.nthreads);

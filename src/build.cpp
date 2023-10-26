@@ -31,6 +31,8 @@ int build_main(const argparse::ArgumentParser& parser)
         idx.visit(saver);
         if (opts.verbose) std::cerr << "Written " + std::to_string(saver.get_byte_size()) + " Bytes\n";
     }
+    std::cerr << bit::lsbll(uint64_t(1)) << "\n";
+    std::cerr << bit::msbll(uint64_t(1)) << "\n";
     return 0;
 }
 

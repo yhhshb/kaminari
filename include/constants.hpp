@@ -5,6 +5,7 @@
 #include "compile_constants.tdp"
 
 #include "../bundled/biolib/include/bit_vector.hpp"
+#include "../bundled/biolib/include/packed_vector.hpp"
 #include "../bundled/biolib/include/bit_parser.hpp"
 #include "../bundled/biolib/include/elias_fano.hpp"
 #include "../bundled/biolib/include/codes.hpp"
@@ -18,7 +19,8 @@
 namespace kaminari {
 
 typedef bit::vector<uint64_t> bit_vector;
-typedef bit::rs::array<bit_vector, 64, 8, false> ranked_bit_vector;
+typedef bit::packed::vector<uint64_t> packed_vector;
+typedef bit::rs::array<bit_vector, 64, 8, false, false> ranked_bit_vector;
 typedef bit::ef::array ef_sequence;
 typedef bit::parser<uint64_t> bit_parser;
 typedef emem::external_memory_vector<uint32_t, false> emem_colors;
