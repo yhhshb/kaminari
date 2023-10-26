@@ -90,7 +90,7 @@ void
 array_based<MPHF>::rle_encoding::build(std::vector<std::size_t> const& uncompressed_map, std::size_t max_color_value, bool verbose)
 {
     using namespace iterators;
-    values = pv_t(bit::msbll(max_color_value));
+    values = pv_t(static_cast<std::size_t>(std::floor(std::log2(max_color_value))) + 1);
     wrapper::rle_view view(uncompressed_map.cbegin(), uncompressed_map.cend());
     std::vector<std::size_t> uncompressed_lengths;
     std::size_t length_check = 0;
@@ -109,10 +109,11 @@ array_based<MPHF>::rle_encoding::build(std::vector<std::size_t> const& uncompres
         auto values_bit_size = values.size() * values.bit_width();
         std::cerr << "\tUniverse = " << uncompressed_map.size() << " k-mers\n";
         std::cerr << "\t" << values.size() << " values of " << values.bit_width() << " = " << values_bit_size << " bits\n";
-        std::cerr << "\t" << values.size() << " lengths encoded by Elias-Fano (" << lengths.bit_size() << " bits\n";
+        std::cerr << "\t" << values.size() << " lengths encoded by Elias-Fano (" << lengths.bit_size() << " bits)\n";
         std::cerr << "\tnumber of rle runs = " << lengths.size() << "\n";
         auto total_bits = values_bit_size + lengths.bit_size();
-        std::cerr << "\tTotal size (values + lengths) = " << total_bits << "\n";
+        std::cerr << "\tTotal size (values + lengths) = " << total_bits << " bits = " << total_bits / 8 << " Bytes (+- 8 bits)\n";
+        std::cerr << "\tor: " << double(total_bits) / double(uncompressed_map.size()) << " bits/k-mer)\n";
     }
 }
 
