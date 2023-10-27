@@ -105,4 +105,12 @@ target_link_libraries(kaminari
   ${CMAKE_DL_LIBS}
 )
 
+if (LINUX)
+  target_link_libraries(kaminari
+    rt
+  )
+endif()
+
+
+
 #----------------------------- Tests ----------------------------
