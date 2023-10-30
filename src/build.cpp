@@ -60,7 +60,7 @@ argparse::ArgumentParser get_parser_build()
     parser.add_argument("-d", "--tmp-dir")
         .help("temporary directory")
         .default_value(std::string("."));
-    parser.add_argument("-m", "--max-ram")
+    parser.add_argument("-g", "--max-ram")
         .help("RAM limit (GB) [4]")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(4));
