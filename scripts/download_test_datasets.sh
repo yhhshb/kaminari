@@ -1,5 +1,3 @@
-#!/bin/bash
-
 function debian_realpath() {
     f=$@;
     if [ -d "$f" ]; then
