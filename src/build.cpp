@@ -82,7 +82,6 @@ opt_t::fn_t read_filenames(std::string const& filenames_list)
     if (!in.is_open()) throw std::runtime_error("error in opening file");
     std::string filename;
     while (in >> filename) buffer.push_back(filename);
-    std::cerr << "about to process " << buffer.size() << " files...\n";
     in.close();
     return buffer;
 }

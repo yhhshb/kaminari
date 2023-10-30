@@ -46,13 +46,16 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
     std::string tmp_fasta_input = build_parameters.output_filename + ".fa";
     GGCAT ggreader(build_parameters);
     {
-        if (build_parameters.verbose) std::cerr << "step 1. building u2c and m_ccs\n";
+        if (build_parameters.verbose) {
+            std::cerr << "step 1. building u2c and m_ccs\n";
+            std::cerr << "about to process " << m_filenames.size() << " files...\n";
+        }
+
         std::size_t num_unitigs = 0;
         std::size_t num_distinct_colors = 0;
 
         std::ofstream out(tmp_fasta_input.c_str()); // FIXME: write unitigs to fasta file for lpHash 
         if (not out.is_open()) throw std::runtime_error("cannot open output file");
-
         typename ColorClasses::builder colors_builder(m_filenames.size(), build_parameters.verbose);
 
         ggreader.loop_through_unitigs(
