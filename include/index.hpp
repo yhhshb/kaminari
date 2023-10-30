@@ -43,14 +43,11 @@ void
 index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
 {
     m_filenames = build_parameters.input_filenames;
+    if (build_parameters.verbose) std::cerr << "about to process " << m_filenames.size() << " files...\n";
     std::string tmp_fasta_input = build_parameters.output_filename + ".fa";
     GGCAT ggreader(build_parameters);
     {
-        if (build_parameters.verbose) {
-            std::cerr << "step 1. building u2c and m_ccs\n";
-            std::cerr << "about to process " << m_filenames.size() << " files...\n";
-        }
-
+        if (build_parameters.verbose) std::cerr << "step 1. building u2c and m_ccs\n";
         std::size_t num_unitigs = 0;
         std::size_t num_distinct_colors = 0;
 
