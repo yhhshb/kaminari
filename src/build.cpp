@@ -61,9 +61,9 @@ argparse::ArgumentParser get_parser_build()
         .help("temporary directory")
         .default_value(std::string("."));
     parser.add_argument("-m", "--max-ram")
-        .help("RAM limit (MB)")
+        .help("RAM limit (GB) [4]")
         .scan<'d', std::size_t>()
-        .default_value(std::size_t(1000));
+        .default_value(std::size_t(4));
     parser.add_argument("-C", "--check")
         .help("check MPHF correctness")
         .implicit_value(true)
@@ -107,6 +107,10 @@ opt_t check_args(const argparse::ArgumentParser& parser)
     opts.nthreads = static_cast<decltype(opts.nthreads) > (tmp);
 
     tmp = parser.get<std::size_t>("--max-ram");
+    if (tmp == 0) {
+        std::cerr << "Warning: max ram = 0, setting it to 1 GB\n";
+        tmp = 1;
+    }
     opts.max_ram = tmp;
 
     opts.check = parser.get<bool>("--check");
