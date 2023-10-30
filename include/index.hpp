@@ -108,12 +108,12 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
             {
                 if (not same_color) ++color_class_id;
                 auto hash_values = hf(unitig.data, unitig.size, true);
-                
+                // std::cerr << "hashes computed\n";
                 for (auto v : hash_values) {
-                    // std::cerr << "hash value " << v << "\n";
                     auto cc = m_map.at(v);
                     // std::cerr << " with color class id = " << cc << " (true color class = " << color_class_id << ")\n";
                     if (cc != color_class_id) {
+                        std::cerr << "Check FAIL\n"; // Because Rust cannot catch foreign exceptions
                         throw std::runtime_error("Check FAIL");
                     }
                 }
