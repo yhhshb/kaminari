@@ -111,6 +111,9 @@ opt_t check_args(const argparse::ArgumentParser& parser)
     opts.check = parser.get<bool>("--check");
     opts.verbose = parser.get<bool>("--verbose");
 
+    if (opts.check and opts.nthreads != 1) {
+        std::cerr << "[Warning] Checking does not support multi-threading\n";
+    }
     if (opts.input_filenames.size() == 1) opts.input_filenames = read_filenames(opts.input_filenames.at(0));
 
     return opts;

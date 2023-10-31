@@ -118,7 +118,7 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
                     }
                 }
             },
-            build_parameters.nthreads);
+            1); //build_parameters.nthreads);
         std::cerr << "Checking done. Everything OK\n";
     }
 }
