@@ -7,9 +7,6 @@
 #include "../bundled/biolib/include/rle_view.hpp"
 #include "../bundled/biolib/include/cumulative_iterator.hpp"
 
-#include "constants.hpp"
-#include "GGCAT.hpp"
-
 namespace kaminari {
 namespace mapper {
 
@@ -18,7 +15,7 @@ class array_based
 {
     public:
         array_based() {}
-        void build(MPHF const& hf, GGCAT& cdbg, bool verbose);
+        void build(MPHF const& hf, std::string const& cdbg, bool verbose);
         uint32_t at(std::size_t kmer_idx) const {return map.at(kmer_idx);}
         // std::map<std::size_t, std::size_t> get_histogram() const noexcept;
 
@@ -53,20 +50,34 @@ class array_based
 
 template <class MPHF>
 void 
-array_based<MPHF>::build(MPHF const& hf, GGCAT& cdbg, bool verbose) 
+array_based<MPHF>::build(MPHF const& hf, std::string const& cdbg, bool verbose) 
 {
-    std::size_t color_class_id = 0;
     std::vector<std::size_t> uncompressed_map;
     uncompressed_map.resize(hf.get_kmer_count());
     if (verbose) std::cerr << "Looping through unitigs <--\n";
-    cdbg.loop_through_unitigs(
-        [&](ggcat::Slice<char> const unitig, ggcat::Slice<uint32_t> const colors, bool same_color) 
-        {
-            if (!same_color) ++color_class_id; // color_id
-            auto hash_values = hf(unitig.data, unitig.size, true);
-            for (auto v : hash_values) uncompressed_map[v] = color_class_id;
+    std::ifstream fastain(cdbg.c_str());
+    std::string buffer;
+    // std::size_t color_class_id = 0;
+    // cdbg.loop_through_unitigs(
+    //     [&](ggcat::Slice<char> const unitig, ggcat::Slice<uint32_t> const colors, bool same_color) 
+    //     {
+    //         if (!same_color) ++color_class_id; // color_id
+    //         auto hash_values = hf(unitig.data, unitig.size, true);
+    //         for (auto v : hash_values) uncompressed_map[v] = color_class_id;
+    //     }
+    // );
+    std::size_t color_class_id = 0;
+    while(std::getline(fastain, buffer)) {
+        if (buffer.size()) {
+            if (buffer[0] == '>') {
+                color_class_id = std::strtoull(buffer.data() + 1, NULL, 10);
+            } else {
+                auto hash_values = hf(buffer.data(), buffer.size(), true);
+                assert(color_class_id != 0);
+                for (auto v : hash_values) uncompressed_map[v] = color_class_id;
+            }
         }
-    );
+    }
     if (verbose) std::cerr << "DONE! (looping through unitigs) <--\n";
     // map.swap(uncompressed_map); // FIXME with proper compression
     map.build(uncompressed_map, color_class_id, verbose);

@@ -62,10 +62,10 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
                     ++num_distinct_colors; // color_id
                     colors_builder.add_color_set(colors.data, colors.size); // compress colors
                 }
-                out << ">\n";
+                out << ">" << num_distinct_colors << "\n";
                 out.write(unitig.data, unitig.size);
                 out << '\n';
-                num_unitigs += 1;
+                ++num_unitigs;
             }
         );
         out.close();
@@ -86,40 +86,62 @@ index<ColorClasses, ColorMapper>::build(const opt_t& build_parameters)
     {
         if (build_parameters.verbose) std::cerr << "step 2. build minimal perfect hash function\n";
         hf.build(get_lphash_options(build_parameters), std::cerr);
-        try { // remove unitig file
-            std::remove(tmp_fasta_input.c_str());
-        } catch (std::exception const& e) {
-            std::cerr << e.what() << std::endl;
-        }
     }
 
     { // step 3
         if (build_parameters.verbose) std::cerr << "step 3. build mapping from k-mers to colors\n";
-        m_map.build(hf, ggreader, build_parameters.verbose);
+        // m_map.build(hf, ggreader, build_parameters.verbose);
+        m_map.build(hf, tmp_fasta_input, build_parameters.verbose);
     }
-
+    
     if (build_parameters.check) {
         std::cerr << "step 4. check correctness...\n";
+        std::ifstream fastain(tmp_fasta_input.c_str());
+        std::string buffer;
         std::size_t color_class_id = 0;
-        ggreader.loop_through_unitigs(
-            [&](ggcat::Slice<char> const unitig, 
-                ggcat::Slice<uint32_t> const colors,
-                bool same_color) // everything has the same color
-            {
-                if (not same_color) ++color_class_id;
-                auto hash_values = hf(unitig.data, unitig.size, true);
-                // std::cerr << "hashes computed\n";
-                for (auto v : hash_values) {
-                    auto cc = m_map.at(v);
-                    // std::cerr << " with color class id = " << cc << " (true color class = " << color_class_id << ")\n";
-                    if (cc != color_class_id) {
-                        std::cerr << "Check FAIL\n"; // Because Rust cannot catch foreign exceptions
-                        throw std::runtime_error("Check FAIL");
+        while(std::getline(fastain, buffer)) {
+            if (buffer.size()) {
+                if (buffer[0] == '>') {
+                    color_class_id = std::strtoull(buffer.data() + 1, NULL, 10);
+                } else {
+                    auto hash_values = hf(buffer.data(), buffer.size(), true);
+                    assert(color_class_id != 0);
+                    for (auto v : hash_values) {
+                        auto cc = m_map.at(v);
+                        // std::cerr << " with color class id = " << cc << " (true color class = " << color_class_id << ")\n";
+                        if (cc != color_class_id) {
+                            std::cerr << "Check FAIL\n"; // Because Rust cannot catch foreign exceptions
+                            throw std::runtime_error("Check FAIL");
+                        }
                     }
                 }
-            },
-            1); //build_parameters.nthreads);
+            }
+        }
+        // ggreader.loop_through_unitigs(
+        //     [&](ggcat::Slice<char> const unitig, 
+        //         ggcat::Slice<uint32_t> const colors,
+        //         bool same_color) // everything has the same color
+        //     {
+        //         if (not same_color) ++color_class_id;
+        //         auto hash_values = hf(unitig.data, unitig.size, true);
+        //         // std::cerr << "hashes computed\n";
+        //         for (auto v : hash_values) {
+        //             auto cc = m_map.at(v);
+        //             // std::cerr << " with color class id = " << cc << " (true color class = " << color_class_id << ")\n";
+        //             if (cc != color_class_id) {
+        //                 std::cerr << "Check FAIL\n"; // Because Rust cannot catch foreign exceptions
+        //                 throw std::runtime_error("Check FAIL");
+        //             }
+        //         }
+        //     }
+        // );
         std::cerr << "Checking done. Everything OK\n";
+    }
+
+    try { // remove unitig file
+        std::remove(tmp_fasta_input.c_str());
+    } catch (std::exception const& e) {
+        std::cerr << e.what() << std::endl;
     }
 }
 
