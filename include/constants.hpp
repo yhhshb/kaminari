@@ -41,6 +41,7 @@ struct opt_t {
     uint8_t m;
     uint8_t nthreads;
     std::size_t max_ram;
+    double pthash_constant;
     bool check;
     bool verbose;
 };

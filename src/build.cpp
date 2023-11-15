@@ -60,6 +60,10 @@ argparse::ArgumentParser get_parser_build()
         .help("RAM limit (GB) [4]")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(4));
+    parser.add_argument("-c", "--pthash-constant")
+        .help("PTHash build constant")
+        .scan<'f', double>()
+        .default_value(double(3));
     parser.add_argument("-C", "--check")
         .help("check MPHF correctness")
         .implicit_value(true)
@@ -107,7 +111,7 @@ opt_t check_args(const argparse::ArgumentParser& parser)
         tmp = 1;
     }
     opts.max_ram = tmp;
-
+    opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.check = parser.get<bool>("--check");
     opts.verbose = parser.get<bool>("--verbose");
 

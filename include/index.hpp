@@ -191,7 +191,7 @@ index<ColorClasses, ColorMapper>::get_lphash_options(const opt_t& build_paramete
     lphash_config.tmp_dirname = build_parameters.tmp_dir;
     lphash_config.max_memory = build_parameters.max_ram;
     lphash_config.num_threads = build_parameters.nthreads;
-    lphash_config.c = constants::lphash_c;
+    lphash_config.c = build_parameters.pthash_constant;
     lphash_config.k = build_parameters.k;
     lphash_config.m = build_parameters.m;
     lphash_config.verbose = build_parameters.verbose;
