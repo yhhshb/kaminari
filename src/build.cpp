@@ -15,9 +15,8 @@ opt_t check_args(const argparse::ArgumentParser& parser);
 int build_main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    index<color_classes::hybrid, mapper::array_based<lphash_mphf_t>> idx(opts);
+    minimizer::index<color_classes::hybrid, mapper::array_based<pthash_minimizers_mphf_t>> idx(opts);
     if (opts.verbose) {
-        // idx.print_map_histogram(std::cerr);
         idx.memory_breakdown(std::cerr);
         std::cerr << "\n";
     }
@@ -60,10 +59,18 @@ argparse::ArgumentParser get_parser_build()
         .help("RAM limit (GB) [4]")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(4));
+    parser.add_argument("-s", "--seed")
+        .help("random seed [42]")
+        .scan<'d', uint64_t>()
+        .default_value(uint64_t(42));
     parser.add_argument("-c", "--pthash-constant")
         .help("PTHash build constant")
         .scan<'f', double>()
         .default_value(double(3));
+    parser.add_argument("-a", "--canonical")
+        .help("canonical minimizers")
+        .default_value(false)
+        .implicit_value(true);
     parser.add_argument("-C", "--check")
         .help("check MPHF correctness")
         .implicit_value(true)
@@ -111,7 +118,9 @@ opt_t check_args(const argparse::ArgumentParser& parser)
         tmp = 1;
     }
     opts.max_ram = tmp;
+    opts.seed = parser.get<uint64_t>("--seed");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
+    opts.canonical = parser.get<bool>("--canonical");
     opts.check = parser.get<bool>("--check");
     opts.verbose = parser.get<bool>("--verbose");
 

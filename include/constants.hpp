@@ -11,8 +11,12 @@
 #include "../bundled/biolib/include/codes.hpp"
 #include "../bundled/biolib/include/external_memory_vector.hpp"
 #include "../bundled/biolib/include/counting_iterator.hpp"
+#include "../bundled/biolib/include/ordered_unique_sampler.hpp"
+#include "../bundled/biolib/include/member_iterator.hpp"
 #include "../bundled/biolib/include/io.hpp"
 #include "../bundled/biolib/include/logtools.hpp"
+#include "../bundled/biolib/include/hash.hpp"
+#include "../bundled/lphash/external/pthash/include/pthash.hpp"
 #include "../bundled/lphash/lib/include/partitioned_mphf.hpp"
 #include "../bundled/lphash/main/include/constants.hpp"
 
@@ -28,9 +32,15 @@ typedef iterators::counting_iterator<uint32_t> dummy_itr_t;
 typedef io::mut_saver saver;
 typedef io::loader loader;
 typedef logging_tools::libra libra;
+typedef hash::hash64 hash64;
+
+typedef pthash::build_configuration pthash_opt_t;
+typedef pthash::single_phf<pthash::murmurhash2_64, pthash::dictionary_dictionary, true> pthash_minimizers_mphf_t;
 
 typedef lphash::mphf::partitioned lphash_mphf_t;
 typedef lphash::mphf::interface::configuration lphash_configuration_t;
+
+typedef uint64_t minimizer_t;
 
 struct opt_t {
     using fn_t = std::vector<std::string>;
@@ -41,7 +51,9 @@ struct opt_t {
     uint8_t m;
     uint8_t nthreads;
     std::size_t max_ram;
+    uint64_t seed;
     double pthash_constant;
+    bool canonical;
     bool check;
     bool verbose;
 };
