@@ -45,21 +45,36 @@ class index
         };
 
         std::tuple<typename ColorClasses::builder, std::size_t, std::size_t> 
-        collect_minimizers_and_colors(const opt_t& build_parameters, mmc_vector_t& mms_and_colors) const;
+        collect_minimizers_and_colors(
+            const opt_t& build_parameters, 
+            mmc_vector_t& mms_and_colors
+        ) const;
 
-        std::vector<mm_cids_hash_t> group_minimizers_by_color(mmc_vector_t&& mms_and_colors) const;
-        std::vector<minimizer_t> build_minimizers_mphf(
+        std::vector<mm_cids_hash_t> 
+        group_minimizers_by_color(
+            const opt_t& build_parameters,
+            mmc_vector_t&& mms_and_colors
+        ) const;
+
+        std::vector<minimizer_t> 
+        build_minimizers_mphf(
             const opt_t& build_parameters,
             const std::vector<typename METHOD_HEADER::mm_cids_hash_t>& mm_cids
         );
-        void merge_colors_by_minimizer(
+
+        void 
+        merge_colors_by_minimizer(
             const opt_t& build_parameters,
             const std::vector<minimizer_t>& minimizers,
             const std::vector<typename METHOD_HEADER::mm_cids_hash_t>& mm_cids,
             const ColorClasses& unmerged_colors
         );
-        void build(const opt_t& build_parameters);
-        pthash_opt_t get_pthash_options(const opt_t& build_parameters);
+
+        void 
+        build(const opt_t& build_parameters);
+
+        pthash_opt_t 
+        get_pthash_options(const opt_t& build_parameters);
 
         opt_t::fn_t m_filenames;
         ColorClasses m_ccs; // colors
@@ -137,8 +152,11 @@ METHOD_HEADER::collect_minimizers_and_colors(const opt_t& build_parameters, mmc_
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::mm_cids_hash_t> 
-METHOD_HEADER::group_minimizers_by_color(mmc_vector_t&& mms_and_colors) const
+METHOD_HEADER::group_minimizers_by_color(
+    const opt_t& build_parameters,
+    mmc_vector_t&& mms_and_colors) const
 { // compress color indexes associated to minimizers into vectors (one vector per minimizer)
+    if (build_parameters.verbose) std::cerr << "\tstep 1: Assign colors to minimizers\n";
     auto itr = mms_and_colors.cbegin();
     auto end = mms_and_colors.cend();
     std::vector<mm_cids_hash_t> minimizers_cids_hashes;
@@ -151,6 +169,7 @@ METHOD_HEADER::group_minimizers_by_color(mmc_vector_t&& mms_and_colors) const
         }
         minimizers_cids_hashes.emplace_back(mm, std::move(mm_color_ids), 42);
     }
+    if (build_parameters.verbose) std::cerr << "\tstep 2: Group minimizers by color\n";
     std::sort(
         minimizers_cids_hashes.begin(), 
         minimizers_cids_hashes.end(), 
@@ -172,8 +191,23 @@ METHOD_HEADER::build_minimizers_mphf(
         iterators::member_iterator(mm_cids.begin(), member),
         iterators::member_iterator(mm_cids.end(), member)
     );
-    if (build_parameters.verbose) std::cerr << "\tstep 2: build minimizers MPHF\n";
+    if (build_parameters.verbose) std::cerr << "\tstep 3: build minimizers MPHF\n";
+
+    int backup, redirect;
+    fflush(stdout);
+    backup = dup(1);
+    redirect = open("/dev/null", O_WRONLY);
+    dup2(redirect, 1);
+    close(redirect);
+
     hf.build_in_external_memory(minimizers.begin(), minimizers.size(), get_pthash_options(build_parameters));
+
+    fflush(stdout);
+    dup2(backup, 1);
+    close(backup);
+
+    std::cerr << "check 5" << std::endl;
+
     std::vector<minimizer_t> ordered_minimizers(minimizers.size());
     for (auto mm : minimizers) {
         ordered_minimizers[hf(mm)] = mm;
@@ -185,7 +219,7 @@ CLASS_HEADER
 void
 METHOD_HEADER::merge_colors_by_minimizer(
     const opt_t& build_parameters,
-    const std::vector<minimizer_t>& minimizers,
+    const std::vector<minimizer_t>& mphf_ordered_minimizers,
     const std::vector<typename METHOD_HEADER::mm_cids_hash_t>& mm_cids,
     const ColorClasses& unmerged_colors)
 {
@@ -213,15 +247,22 @@ METHOD_HEADER::merge_colors_by_minimizer(
         return row;
     };
 
+    if (build_parameters.verbose) std::cerr << "\tstep 4: store colors\n";
+
     for (auto& record : mm_cids) {
         auto colors = collect_colors(record);
         merged_colors_builder.add_color_set(colors.data(), colors.size());
+        // we then need to create a map hash(minimizer) -> color
+        if (build_parameters.verbose) std::cerr << "\t- build mapping from k-mers to colors\n";
+        // m_map.build(hf, m_ccs, build_parameters.verbose);
     }
 
-    for (auto mm : minimizers) {
+    for (auto mm : mphf_ordered_minimizers) {
         auto colors = collect_colors(mm_cids.at(hf(mm)));
         merged_colors_builder.add_color_set(colors.data(), colors.size());
+        // do nothing, minimizers were MPHF-sorted so nothing to do
     }
+    
     merged_colors_builder.build(m_ccs);
 }
 
@@ -230,80 +271,55 @@ void
 METHOD_HEADER::build(const opt_t& build_parameters)
 {
     m_filenames = build_parameters.input_filenames;
-    if (build_parameters.verbose) {
-        std::cerr << "\tstep 1: building color map and collect minimizers\n";
-        std::cerr << "about to process " << m_filenames.size() << " files...\n";
-    }
-    mmc_vector_t mms_and_colors(build_parameters.max_ram, build_parameters.tmp_dir, "mm_dump.bin");
+    if (build_parameters.verbose) std::cerr << "About to process " << m_filenames.size() << " files.\n";
+    mmc_vector_t mms_and_colors(build_parameters.max_ram * constants::GB, build_parameters.tmp_dir, "mm_dump.bin");
     auto [unmerged_colors_builder, num_unitigs, num_distinct_colors] = collect_minimizers_and_colors(build_parameters, mms_and_colors);
     if (num_unitigs > std::numeric_limits<uint32_t>::max()) 
         throw std::runtime_error("Number of unitigs > than allowed maximum of " + std::to_string(std::numeric_limits<uint32_t>::max()));
-    std::vector<mm_cids_hash_t> mm_cids = group_minimizers_by_color(std::move(mms_and_colors));
-    std::vector<minimizer_t> minimizers = build_minimizers_mphf(build_parameters, mm_cids);
+    std::cerr << "check 0" << std::endl;
+    std::vector<mm_cids_hash_t> mm_cids = group_minimizers_by_color(build_parameters, std::move(mms_and_colors));
+    std::cerr << "check 1" << std::endl;
+    std::vector<minimizer_t> mphf_ordered_minimizers = build_minimizers_mphf(build_parameters, mm_cids);
+    std::cerr << "check 2" << std::endl;
     ColorClasses unmerged_colors;
     unmerged_colors_builder.build(unmerged_colors);
-    merge_colors_by_minimizer(build_parameters, minimizers, std::move(mm_cids), std::move(unmerged_colors));
+    std::cerr << "check 3" << std::endl;
+    merge_colors_by_minimizer(build_parameters, mphf_ordered_minimizers, std::move(mm_cids), std::move(unmerged_colors));
     if (build_parameters.verbose) {
         std::cerr << "\t\tnum_unitigs " << num_unitigs << "\n";
         std::cerr << "\t\tnum_distinct_colors " << num_distinct_colors << "\n";
     }
-
-    // TODO
-    if (build_parameters.verbose) std::cerr << "\tstep 3: build mapping from k-mers to colors\n";
-    // m_map.build(hf, m_ccs, build_parameters.verbose);
     
     if (build_parameters.check) {
-        std::cerr << "\tstep 4: check correctness...\n";
-        // std::ifstream fastain(tmp_fasta_input.c_str());
-        // std::string buffer;
-        // std::size_t color_class_id = 0;
-        // while(std::getline(fastain, buffer)) {
-        //     if (buffer.size()) {
-        //         if (buffer[0] == '>') {
-        //             color_class_id = std::strtoull(buffer.data() + 1, NULL, 10);
-        //         } else {
-        //             auto hash_values = hf(buffer.data(), buffer.size(), true);
-        //             assert(color_class_id != 0);
-        //             for (auto v : hash_values) {
-        //                 auto cc = m_map.at(v);
-        //                 // std::cerr << " with color class id = " << cc << " (true color class = " << color_class_id << ")\n";
-        //                 if (cc != color_class_id) {
-        //                     std::cerr << "Check FAIL\n"; // Because Rust cannot catch foreign exceptions
-        //                     throw std::runtime_error("Check FAIL");
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-
+        std::cerr << "\tstep 6: check correctness...\n";
+        // TODO
         std::cerr << "Checking done. Everything OK\n";
     }
-
-    // try { // remove unitig file
-    //     std::remove(tmp_fasta_input.c_str());
-    // } catch (std::exception const& e) {
-    //     std::cerr << e.what() << std::endl;
-    // }
 }
 
-template <class ColorClasses, class ColorMapper>
+CLASS_HEADER
 void 
-index<ColorClasses, ColorMapper>::memory_breakdown(std::ostream& out) const noexcept
+METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
 {
     libra scale;
+    scale.visit(m_filenames);
+    out << "The list of input filenames weights: " << scale.get_byte_size() * 8 << " bits";
+    out << "The MPHF of minimizers weights: " << hf.num_bits() << " bits"; 
+    scale.visit(m_ccs);
+    out << "colors weight: " << scale.get_byte_size() * 8 << " bits";
     scale.visit(m_map);
-    out << "Mapping k-mers to colors weights: " << scale.get_byte_size() << " Bytes";
+    out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() * 8 << " bits";
 }
 
-template <class ColorClasses, class ColorMapper>
+CLASS_HEADER
 template <class Visitor>
 void
-index<ColorClasses, ColorMapper>::visit(Visitor& visitor)
+METHOD_HEADER::visit(Visitor& visitor)
 {
     visitor.visit(m_filenames);
+    visitor.visit(hf); // lphash mphf
     visitor.visit(m_ccs); // colors
     visitor.visit(m_map); // map between mphf values and color classes
-    visitor.visit(hf); // lphash mphf
 }
 
 #undef CLASS_HEADER

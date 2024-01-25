@@ -128,7 +128,6 @@ opt_t check_args(const argparse::ArgumentParser& parser)
         std::cerr << "[Warning] Checking does not support multi-threading\n";
     }
     if (opts.input_filenames.size() == 1) opts.input_filenames = read_filenames(opts.input_filenames.at(0));
-
     return opts;
 }
 

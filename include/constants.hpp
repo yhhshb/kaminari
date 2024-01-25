@@ -62,6 +62,7 @@ namespace constants {
 
 static const std::size_t MAX_KMER_SIZE = sizeof(kmer_t) * 4;
 static const auto lphash_c = lphash::constants::c;
+static const std::size_t GB = 1000 * 1000 * 1000;
 
 }
 }

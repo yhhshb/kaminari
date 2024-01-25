@@ -88,6 +88,16 @@ class hybrid
             visitor.visit(m_colors);
         }
 
+        template <typename Visitor>
+        void visit(Visitor& visitor) const
+        {
+            visitor.visit(m_num_docs);
+            visitor.visit(m_sparse_set_threshold_size);
+            visitor.visit(m_very_dense_set_threshold_size);
+            visitor.visit(m_offsets);
+            visitor.visit(m_colors);
+        }
+
     private:
         uint32_t m_num_docs;
         uint32_t m_sparse_set_threshold_size;
