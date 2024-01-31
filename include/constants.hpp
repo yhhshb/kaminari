@@ -65,6 +65,24 @@ static const auto lphash_c = lphash::constants::c;
 static const std::size_t GB = 1000 * 1000 * 1000;
 
 }
+
+namespace non_standard {
+
+template <class Iterator>
+class pthash_input_iterator {
+public:
+    pthash_input_iterator(Iterator& mm_itr) : m_iterator(mm_itr) {}
+
+    void operator++() {++m_iterator;}
+
+    typename Iterator::value_type operator*() const {return (*m_iterator);}
+
+private:
+    Iterator& m_iterator;
+};
+
+}
+
 }
 
 #endif // KAMINARI_CONSTANTS_HPP

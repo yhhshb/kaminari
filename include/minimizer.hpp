@@ -71,6 +71,7 @@ uint64_t from_string(
     buf_pos = 0;
     min_pos = buffer.size();
     kmer_count = 0;
+    mm_count = 0;
     z = 0;
     for (uint64_t i = 0; i < contig_size; ++i) {
         c = constants::seq_nt4_table[static_cast<uint8_t>(contig[i])];

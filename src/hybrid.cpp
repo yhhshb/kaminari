@@ -1,9 +1,10 @@
 #include <string>
-// #include <iostream>
 #include <numeric>
 #include <cassert>
 
 #include "../include/hybrid.hpp"
+
+// #include <iostream>
 
 namespace kaminari {
 namespace color_classes {
@@ -291,7 +292,6 @@ hybrid::iterator
 hybrid::colors(uint64_t color_class_id) const 
 {
     assert(color_class_id < num_color_classes());
-    // uint64_t begin = m_offsets.access(color_class_id);
     uint64_t begin = m_offsets.at(color_class_id);
     return iterator(*this, begin);
 }
