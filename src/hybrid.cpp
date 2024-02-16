@@ -232,8 +232,7 @@ hybrid::iterator::next_comp()
     m_comp_val = bit::decoder::delta(m_parser) + (m_prev_val + 1);
 }
 
-/* update the state of the iterator to the element
-    which is greater-than or equal-to lower_bound */
+/* update the state of the iterator to the element which is greater-than or equal-to lower_bound */
 void 
 hybrid::iterator::next_geq(uint64_t lower_bound) 
 {
@@ -313,7 +312,7 @@ hybrid::num_bits() const
 {
     return 
         8 * (sizeof(m_num_docs) + sizeof(m_sparse_set_threshold_size) + sizeof(m_very_dense_set_threshold_size)) + 
-        m_colors.size() + //essentials::vec_bytes(m_colors) +
+        m_colors.size() + 
         m_offsets.bit_size();
 }
 
@@ -342,11 +341,9 @@ hybrid::print_stats() const
     const uint64_t num_lists = num_color_classes();
     uint64_t num_total_integers = 0;
     for (uint64_t color_class_id = 0; color_class_id != m_offsets.size() - 1; ++color_class_id) {
-        // uint64_t offset = m_offsets.access(color_class_id);
         uint64_t offset = m_offsets.at(color_class_id);
         bit_parser it(m_colors.data(), m_colors.block_size(), offset);
         uint32_t list_size = bit::decoder::delta(it);
-        // uint64_t num_bits = m_offsets.access(color_class_id + 1) - offset;
         uint64_t num_bits = m_offsets.at(color_class_id + 1) - offset;
         auto bucket_it = std::upper_bound(list_size_upperbounds.begin(), list_size_upperbounds.end(), list_size);
         if (bucket_it != list_size_upperbounds.begin() and *(bucket_it - 1) == list_size) --bucket_it;

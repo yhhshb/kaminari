@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 #include <tuple>
-#include <unordered_set>
 #include "constants.hpp"
 #include "GGCAT.hpp"
 #include "minimizer.hpp" // FIXME: to be removed once biolib's minimizer iterators are ready
@@ -79,7 +78,7 @@ class index
 
         opt_t::fn_t m_filenames;
         ColorClasses m_ccs; // colors
-        ColorMapper m_map; // map between mphf values and color classes
+        // ColorMapper m_map; // map between mphf values and color classes
         pthash_minimizers_mphf_t hf; // minimizer mphf
 };
 
@@ -244,20 +243,19 @@ METHOD_HEADER::merge_colors_by_minimizer(
     for (auto itr = sampler.cbegin(); itr != sampler.cend(); ++itr) ++mm_colors_count;
     typename ColorClasses::builder merged_colors_builder(mm_colors_count, build_parameters.verbose);
 
+    std::vector<uint32_t> row; // avoid allocating local variables inside the lambda
     auto collect_colors = [&](const mm_cids_hash_t& record) {
-        std::unordered_set<uint32_t> mm_colors;
+        row.clear();
         for (auto cid : record.cids) {
-            std::cerr << "getting row at idx = " << cid - 1 << std::endl;
             auto itr = unmerged_colors.colors(cid - 1); /* ids start from 1 */
             auto row_size = itr.size();
             for (std::size_t i = 0; i < row_size; ++i) {
-                mm_colors.insert(*itr);
+                row.push_back(*itr);
                 ++itr;
             }
         }
-        std::vector<uint32_t> row;
-        std::copy(mm_colors.begin(), mm_colors.end(), std::back_inserter(row));
-        return row;
+        std::sort(row.begin(), row.end());
+        row.erase(unique(row.begin(), row.end()), row.end());
     };
 
     auto compare = [&](const mm_cids_hash_t& a, const mm_cids_hash_t& b) {
@@ -269,13 +267,11 @@ METHOD_HEADER::merge_colors_by_minimizer(
     if (build_parameters.verbose) std::cerr << "\tstep 4: store colors\n";
 
     for (auto& record : mm_cids) {
-        auto colors = collect_colors(record);
-        for (auto color : colors) std::cerr << color << ", ";
-        std::cerr << "\n";
-        merged_colors_builder.add_color_set(colors.data(), colors.size());
+        collect_colors(record);
+        merged_colors_builder.add_color_set(row.data(), row.size());
         // we then need to create a map hash(minimizer) -> color
-        if (build_parameters.verbose) std::cerr << "\t- build mapping from k-mers to colors\n";
-        // m_map.build(hf, m_ccs, build_parameters.verbose);
+        // if (build_parameters.verbose) std::cerr << "\t- build mapping from k-mers to colors\n";
+        // m_map.build(hf, m_ccs, build_parameters.verbose); // unused for now
     }
     
     merged_colors_builder.build(m_ccs);
@@ -318,12 +314,12 @@ METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
 {
     libra scale;
     scale.visit(m_filenames);
-    out << "The list of input filenames weights: " << scale.get_byte_size() * 8 << " bits";
-    out << "The MPHF of minimizers weights: " << hf.num_bits() << " bits"; 
+    out << "The list of input filenames weights: " << scale.get_byte_size() * 8 << " bits\n";
+    out << "The MPHF of minimizers weights: " << hf.num_bits() << " bits\n";
     scale.visit(m_ccs);
     out << "colors weight: " << scale.get_byte_size() * 8 << " bits";
-    scale.visit(m_map);
-    out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() * 8 << " bits";
+    // scale.visit(m_map);
+    // out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() * 8 << " bits\n";
 }
 
 CLASS_HEADER
@@ -334,7 +330,7 @@ METHOD_HEADER::visit(Visitor& visitor)
     visitor.visit(m_filenames);
     visitor.visit(hf); // lphash mphf
     visitor.visit(m_ccs); // colors
-    visitor.visit(m_map); // map between mphf values and color classes
+    // visitor.visit(m_map); // map between mphf values and color classes
 }
 
 #undef CLASS_HEADER
