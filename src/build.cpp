@@ -110,7 +110,7 @@ opt_t check_args(const argparse::ArgumentParser& parser)
     opts.m = static_cast<decltype(opts.m)>(tmp);
 
     tmp = std::min(parser.get<std::size_t>("-t"), std::size_t(std::thread::hardware_concurrency()));
-    opts.nthreads = static_cast<decltype(opts.nthreads) > (tmp);
+    opts.nthreads = static_cast<decltype(opts.nthreads)> (tmp);
 
     tmp = parser.get<std::size_t>("--max-ram");
     if (tmp == 0) {
