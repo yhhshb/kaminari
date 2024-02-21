@@ -1,6 +1,9 @@
 [submodule "bundled/biolib"]
 	path = bundled/biolib
 	url = https://github.com/yhhshb/biolib.git
-[submodule "bundled/lphash"]
-	path = bundled/lphash
-	url = https://github.com/jermp/lphash.git
+[submodule "bundled/pthash"]
+	path = bundled/pthash
+	url = https://github.com/jermp/pthash.git
+[submodule "bundled/cppitertools"]
+	path = bundled/cppitertools
+	url = https://github.com/ryanhaining/cppitertools.git

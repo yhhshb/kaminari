@@ -6,7 +6,6 @@
 #include "../include/build.hpp"
 #include "../include/index.hpp"
 #include "../include/hybrid.hpp"
-#include "../include/array_mapper.hpp"
 
 namespace kaminari {
 
@@ -15,7 +14,7 @@ opt_t check_args(const argparse::ArgumentParser& parser);
 int build_main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    minimizer::index<color_classes::hybrid, mapper::array_based<pthash_minimizers_mphf_t>> idx(opts);
+    minimizer::index<color_classes::hybrid, std::vector<color_t>> idx(opts);
     if (opts.verbose) {
         idx.memory_breakdown(std::cerr);
         std::cerr << "\n";
@@ -77,8 +76,8 @@ argparse::ArgumentParser get_parser_build()
         .default_value(false);
     parser.add_argument("-v", "--verbose")
         .help("increase output verbosity")
-        .default_value(false)
-        .implicit_value(true);
+        .scan<'d', std::size_t>()
+        .default_value(std::size_t(0));
     return parser;
 }
 
@@ -122,7 +121,7 @@ opt_t check_args(const argparse::ArgumentParser& parser)
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
     opts.check = parser.get<bool>("--check");
-    opts.verbose = parser.get<bool>("--verbose");
+    opts.verbose = parser.get<std::size_t>("--verbose");
 
     if (opts.check and opts.nthreads != 1) {
         std::cerr << "[Warning] Checking does not support multi-threading\n";

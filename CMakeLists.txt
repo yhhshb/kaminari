@@ -45,17 +45,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(argparse)
 
 include_directories(${PROJECT_SOURCE_DIR})
-# include_directories(${PROJECT_SOURCE_DIR}/bundled/biolib)
-
-## GGCAT
-add_custom_target(
-   ggcat_cpp_api
-   COMMAND make
-   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api
-)
-set(GGCAT_CPP_BINDINGS ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_cpp_bindings.a)
-set(GGCAT_CXX_INTEROP ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_cxx_interop.a)
-set(GGCAT_API ${CMAKE_SOURCE_DIR}/bundled/ggcat/crates/capi/ggcat-cpp-api/lib/libggcat_api.a)
 
 ## kaminari 
 
@@ -67,18 +56,9 @@ set(BIOLIB_SOURCES
   bundled/biolib/bundled/MurmurHash3.cpp
 )
 
-# set(LPHASH_SOURCES
-#   bundled/lphash/lib/src/constants.cpp
-#   bundled/lphash/lib/src/minimizer.cpp
-#   bundled/lphash/lib/src/mphf.cpp
-#   bundled/lphash/lib/src/partitioned_mphf.cpp
-#   bundled/lphash/lib/src/quartet_wtree.cpp
-#   bundled/lphash/lib/src
-# )
-
 set(KAMINARI_SOURCES
+  src/constants.cpp
   src/build.cpp
-  src/GGCAT.cpp
   src/hybrid.cpp
 )
 
@@ -86,24 +66,13 @@ add_library(biolib_static STATIC
   ${BIOLIB_SOURCES}
 )
 
-# Create a static lib for LPHash
-# add_library(lphash_static STATIC
-#   ${LPHASH_SOURCES}
-# )
-
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
-add_dependencies(kaminari ggcat_cpp_api biolib_static) # lphash_static
+add_dependencies(kaminari biolib_static) # lphash_static
 target_link_libraries(kaminari
   biolib_static
-  # lphash_static
   argparse
   z
-  ${GGCAT}
-  ${GGCAT_API}
-  ${GGCAT_CPP_BINDINGS}
-  ${GGCAT_CXX_INTEROP}
-  ${CMAKE_DL_LIBS}
 )
 
 if (LINUX)
@@ -111,7 +80,5 @@ if (LINUX)
     rt
   )
 endif()
-
-
 
 #----------------------------- Tests ----------------------------

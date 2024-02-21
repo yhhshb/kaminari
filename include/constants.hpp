@@ -2,6 +2,10 @@
 #define KAMINARI_CONSTANTS_HPP
 
 #include <cstddef>
+#include <zlib.h>
+extern "C" {
+#include "../bundled/kseq.h"
+}
 #include "compile_constants.tdp"
 
 #include "../bundled/biolib/include/bit_vector.hpp"
@@ -16,9 +20,10 @@
 #include "../bundled/biolib/include/io.hpp"
 #include "../bundled/biolib/include/logtools.hpp"
 #include "../bundled/biolib/include/hash.hpp"
-#include "../bundled/lphash/external/pthash/include/pthash.hpp"
-#include "../bundled/lphash/lib/include/partitioned_mphf.hpp"
-#include "../bundled/lphash/main/include/constants.hpp"
+#include "../bundled/pthash/include/pthash.hpp"
+// #include "../bundled/cppitertools/groupby.hpp"
+
+KSEQ_INIT(gzFile, gzread)
 
 namespace kaminari {
 
@@ -37,10 +42,8 @@ typedef hash::hash64 hash64;
 typedef pthash::build_configuration pthash_opt_t;
 typedef pthash::single_phf<pthash::murmurhash2_64, pthash::dictionary_dictionary, true> pthash_minimizers_mphf_t;
 
-typedef lphash::mphf::partitioned lphash_mphf_t;
-typedef lphash::mphf::interface::configuration lphash_configuration_t;
-
 typedef uint64_t minimizer_t;
+typedef uint32_t color_t;
 
 struct opt_t {
     using fn_t = std::vector<std::string>;
@@ -55,34 +58,39 @@ struct opt_t {
     double pthash_constant;
     bool canonical;
     bool check;
-    bool verbose;
+    std::size_t verbose;
 };
 
 namespace constants {
 
 static const std::size_t MAX_KMER_SIZE = sizeof(kmer_t) * 4;
-static const auto lphash_c = lphash::constants::c;
 static const std::size_t GB = 1000 * 1000 * 1000;
 
 }
+
+namespace util {
+
+std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, uint64_t run_identifier);
+
+} // namespace util
 
 namespace non_standard {
 
 template <class Iterator>
 class pthash_input_iterator {
 public:
-    pthash_input_iterator(Iterator& mm_itr) : m_iterator(mm_itr) {}
+    pthash_input_iterator(Iterator mm_itr) : m_iterator(mm_itr) {}
 
     void operator++() {++m_iterator;}
 
     typename Iterator::value_type operator*() const {return (*m_iterator);}
 
 private:
-    Iterator& m_iterator;
+    Iterator m_iterator;
 };
 
-}
+} // namespace non_standard
 
-}
+} // namespace kaminari
 
 #endif // KAMINARI_CONSTANTS_HPP

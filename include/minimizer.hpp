@@ -3,8 +3,6 @@
 
 #include <vector>
 
-// #include "../include/constants.hpp"
-
 namespace minimizer {
 
 #pragma pack(push, 2)
