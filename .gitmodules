@@ -1,6 +1,3 @@
-[submodule "bundled/ggcat"]
-	path = bundled/ggcat
-	url = https://github.com/algbio/ggcat.git
 [submodule "bundled/biolib"]
 	path = bundled/biolib
 	url = https://github.com/yhhshb/biolib.git
