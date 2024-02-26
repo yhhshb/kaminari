@@ -52,7 +52,7 @@ METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
     out << "The list of input filenames weights: " << scale.get_byte_size() * 8 << " bits\n";
     out << "The MPHF of minimizers weights: " << hf.num_bits() << " bits\n";
     scale.visit(m_ccs);
-    out << "colors weight: " << scale.get_byte_size() * 8 << " bits";
+    out << "colors weight: " << scale.get_byte_size() * 8 << " bits\n";
     scale.visit(m_map);
     out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() * 8 << " bits\n";
 }
@@ -192,21 +192,23 @@ METHOD_HEADER::build(const opt_t& build_parameters)
     }
 
     typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-    uint32_t cid = 0;
-    // for (auto&& color_mms : iter::groupby(sorted_color_lists, [](const cc_mm_t& cmpair) {return cmpair.first;})) {
-    //     cbuild.add_color_set(color_mms.data(), color_mms.size());
-    //     for (auto mm : color_mms.second) {
-    //         m_map[hf(mm)] = cid;
-    //     }
-    // }
+    
+    
     {
+        
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
+        // for (auto&& color_mms : iter::groupby(sorted_color_lists, [](const cc_mm_t& cmpair) {return cmpair.first;})) {
+        //     cbuild.add_color_set(color_mms.data(), color_mms.size());
+        //     for (auto mm : color_mms.second) {
+        //         m_map[hf(mm)] = cid;
+        //     }
+        // }
         m_map.resize(hf.num_keys());
+        uint32_t cid = 0;
         auto itr = sorted_color_lists.cbegin();
         while(itr != sorted_color_lists.cend()) {
-            auto current = (*itr).first;
-            std::cerr << current << "\n";
-            while((*itr).first == current and itr != sorted_color_lists.cend()) {
+            std::vector<uint32_t> current = (*itr).first;
+            while(itr != sorted_color_lists.cend() and (*itr).first == current) {
                 m_map[hf((*itr).second)] = cid;
                 ++itr;
             }
