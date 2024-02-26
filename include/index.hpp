@@ -5,6 +5,8 @@
 #include "constants.hpp"
 #include "minimizer.hpp"
 
+#include "../bundled/biolib/bundled/prettyprint.hpp"
+
 namespace kaminari {
 namespace minimizer {
 
@@ -75,7 +77,7 @@ METHOD_HEADER::build(const opt_t& build_parameters)
     mmc_vector_t tmp_sorted_storage(
         build_parameters.max_ram * constants::GB, 
         build_parameters.tmp_dir, 
-        util::get_tmp_filename(build_parameters.tmp_dir, "minimizer_unitig_id", run_id)
+        util::get_tmp_filename("", "minimizer_unitig_id", run_id)
     );
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
@@ -147,7 +149,7 @@ METHOD_HEADER::build(const opt_t& build_parameters)
     emem::external_memory_vector<cc_mm_t> sorted_color_lists(
         build_parameters.max_ram * constants::GB, 
         build_parameters.tmp_dir, 
-        util::get_tmp_filename(build_parameters.tmp_dir, "color_minimizer_list", run_id)
+        util::get_tmp_filename("", "color_minimizer_list", run_id)
     );
     // for (auto&& mm_cc : iter::groupby(tmp_sorted_storage, [](const cc_mm_t& item) {item.first;})) {
     //     sorted_color_lists.push_back(mm_cc.second, mm_cc.first); // save (minimizer, [ids]) to disk
@@ -157,11 +159,10 @@ METHOD_HEADER::build(const opt_t& build_parameters)
         emem::external_memory_vector<minimizer_t, false> unique_minimizers(
             build_parameters.max_ram * constants::GB, 
             build_parameters.tmp_dir, 
-            util::get_tmp_filename(build_parameters.tmp_dir, "unique_minimizers", run_id)
+            util::get_tmp_filename("", "unique_minimizers", run_id)
         );
         
-        auto itr = tmp_sorted_storage.cbegin();
-        std::cerr << "PROVA\n";
+        auto itr = tmp_sorted_storage.cbegin(); // FIXME
         while (itr != tmp_sorted_storage.cend()) { // build list of colors for each minimizer
             auto current = (*itr).first;
             std::vector<color_t> ids;
@@ -204,6 +205,7 @@ METHOD_HEADER::build(const opt_t& build_parameters)
         auto itr = sorted_color_lists.cbegin();
         while(itr != sorted_color_lists.cend()) {
             auto current = (*itr).first;
+            std::cerr << current << "\n";
             while((*itr).first == current and itr != sorted_color_lists.cend()) {
                 m_map[hf((*itr).second)] = cid;
                 ++itr;
