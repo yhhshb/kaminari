@@ -30,14 +30,15 @@ hybrid::builder::builder(std::size_t number_of_documents, bool verb)
     m_offsets.push_back(0);
 
     if (verbose) {
-        std::cerr << "m_num_docs: " << m_num_docs << "\n"
-                << "m_sparse_set_threshold_size " << m_sparse_set_threshold_size << "\n" 
-                << "m_very_dense_set_threshold_size " << m_very_dense_set_threshold_size << "\n";
+        std::cerr 
+            << "m_num_docs: " << m_num_docs << "\n"
+            << "m_sparse_set_threshold_size " << m_sparse_set_threshold_size << "\n" 
+            << "m_very_dense_set_threshold_size " << m_very_dense_set_threshold_size << "\n";
     }
 }
 
 void 
-hybrid::builder::add_color_set(uint32_t* const colors, uint64_t list_size) 
+hybrid::builder::add_color_set(uint32_t const * const colors, uint64_t list_size) 
 {
     /* encode list_size */
     bit::encoder::delta(m_bvb, list_size);

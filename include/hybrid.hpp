@@ -20,7 +20,7 @@ class hybrid
         {
             public:
                 builder(std::size_t number_of_documents, bool verbose = false);
-                void add_color_set(uint32_t* const colors, uint64_t list_size);
+                void add_color_set(uint32_t const * const colors, uint64_t list_size);
                 void build(hybrid& index);
 
             private:

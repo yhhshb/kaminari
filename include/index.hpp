@@ -49,12 +49,12 @@ METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
 {
     libra scale;
     scale.visit(m_filenames);
-    out << "The list of input filenames weights: " << scale.get_byte_size() * 8 << " bits\n";
-    out << "The MPHF of minimizers weights: " << hf.num_bits() << " bits\n";
+    out << "The list of input filenames weights: " << scale.get_byte_size() << " Bytes\n";
+    out << "The MPHF of minimizers weights: " << hf.num_bits() / 8 << " Bytes\n";
     scale.visit(m_ccs);
-    out << "colors weight: " << scale.get_byte_size() * 8 << " bits\n";
+    out << "Colors weight: " << scale.get_byte_size() << " Bytes\n";
     scale.visit(m_map);
-    out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() * 8 << " bits\n";
+    out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() << " Bytes\n";
 }
 
 CLASS_HEADER
@@ -151,9 +151,6 @@ METHOD_HEADER::build(const opt_t& build_parameters)
         build_parameters.tmp_dir, 
         util::get_tmp_filename("", "color_minimizer_list", run_id)
     );
-    // for (auto&& mm_cc : iter::groupby(tmp_sorted_storage, [](const cc_mm_t& item) {item.first;})) {
-    //     sorted_color_lists.push_back(mm_cc.second, mm_cc.first); // save (minimizer, [ids]) to disk
-    // }
     { // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
         if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
         emem::external_memory_vector<minimizer_t, false> unique_minimizers(
@@ -162,7 +159,7 @@ METHOD_HEADER::build(const opt_t& build_parameters)
             util::get_tmp_filename("", "unique_minimizers", run_id)
         );
         
-        auto itr = tmp_sorted_storage.cbegin(); // FIXME
+        auto itr = tmp_sorted_storage.cbegin();
         while (itr != tmp_sorted_storage.cend()) { // build list of colors for each minimizer
             auto current = (*itr).first;
             std::vector<color_t> ids;
@@ -191,29 +188,23 @@ METHOD_HEADER::build(const opt_t& build_parameters)
         close(backup);
     }
 
-    typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-    
-    
     {
-        
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
-        // for (auto&& color_mms : iter::groupby(sorted_color_lists, [](const cc_mm_t& cmpair) {return cmpair.first;})) {
-        //     cbuild.add_color_set(color_mms.data(), color_mms.size());
-        //     for (auto mm : color_mms.second) {
-        //         m_map[hf(mm)] = cid;
-        //     }
-        // }
+        typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
         m_map.resize(hf.num_keys());
         uint32_t cid = 0;
         auto itr = sorted_color_lists.cbegin();
         while(itr != sorted_color_lists.cend()) {
-            std::vector<uint32_t> current = (*itr).first;
-            while(itr != sorted_color_lists.cend() and (*itr).first == current) {
-                m_map[hf((*itr).second)] = cid;
+            const std::vector<uint32_t>& current_color = (*itr).first;
+            cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
+            while(itr != sorted_color_lists.cend() and (*itr).first == current_color) {
+                auto minimizer = (*itr).second;
+                m_map[hf(minimizer)] = cid;
                 ++itr;
             }
             ++cid;
         }
+        cbuild.build(m_ccs);
     }
 }
 

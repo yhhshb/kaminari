@@ -4,6 +4,3 @@
 [submodule "bundled/pthash"]
 	path = bundled/pthash
 	url = https://github.com/jermp/pthash.git
-[submodule "bundled/cppitertools"]
-	path = bundled/cppitertools
-	url = https://github.com/ryanhaining/cppitertools.git
