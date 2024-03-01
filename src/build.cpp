@@ -23,7 +23,7 @@ int build_main(const argparse::ArgumentParser& parser)
         std::ofstream out(opts.output_filename, std::ios::binary);
         saver saver(out);
         idx.visit(saver);
-        if (opts.verbose) std::cerr << "Written " + std::to_string(saver.get_byte_size()) + " Bytes\n";
+        if (opts.verbose) std::cerr << "Written " << saver.get_byte_size() << " Bytes\n";
     }
     return 0;
 }

@@ -21,7 +21,6 @@ extern "C" {
 #include "../bundled/biolib/include/logtools.hpp"
 #include "../bundled/biolib/include/hash.hpp"
 #include "../bundled/pthash/include/pthash.hpp"
-// #include "../bundled/cppitertools/groupby.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 

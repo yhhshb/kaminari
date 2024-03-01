@@ -50,11 +50,14 @@ METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
     libra scale;
     scale.visit(m_filenames);
     out << "The list of input filenames weights: " << scale.get_byte_size() << " Bytes\n";
+    scale.reset();
     out << "The MPHF of minimizers weights: " << hf.num_bits() / 8 << " Bytes\n";
     scale.visit(m_ccs);
     out << "Colors weight: " << scale.get_byte_size() << " Bytes\n";
+    scale.reset();
     scale.visit(m_map);
     out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() << " Bytes\n";
+    scale.reset();
 }
 
 CLASS_HEADER
