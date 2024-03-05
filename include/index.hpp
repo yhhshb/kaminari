@@ -198,7 +198,7 @@ METHOD_HEADER::build(const opt_t& build_parameters)
         uint32_t cid = 0;
         auto itr = sorted_color_lists.cbegin();
         while(itr != sorted_color_lists.cend()) {
-            const std::vector<uint32_t>& current_color = (*itr).first;
+            auto current_color = (*itr).first;
             cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
             while(itr != sorted_color_lists.cend() and (*itr).first == current_color) {
                 auto minimizer = (*itr).second;
@@ -208,6 +208,11 @@ METHOD_HEADER::build(const opt_t& build_parameters)
             ++cid;
         }
         cbuild.build(m_ccs);
+    }
+
+    if (build_parameters.verbose > 0) {
+        std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
+        std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     }
 }
 
