@@ -2,6 +2,7 @@
 #define MINIMIZER_HPP
 
 #include <vector>
+#include "../bundled/biolib/include/constants.hpp"
 
 namespace minimizer {
 
@@ -43,7 +44,7 @@ uint64_t from_string(
     uint32_t m, 
     uint64_t seed, 
     bool canonical_m_mers,
-    uint64_t& mm_count,
+    std::size_t& mm_count,
     VectorType& accumulator) 
 {
     static_assert(std::is_same<typename VectorType::value_type, record_t>::value);

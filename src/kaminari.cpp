@@ -1,13 +1,16 @@
 #include <iostream>
 #include "../include/build.hpp"
+#include "../include/query.hpp"
 
 using namespace kaminari;
 
 int main(int argc, char* argv[])
 {
-    auto build_parser = get_parser_build();
+    auto build_parser = build::get_parser();
+    auto query_parser = query::get_parser();
     argparse::ArgumentParser program(argv[0]);
     program.add_subparser(build_parser);
+    program.add_subparser(query_parser);
     try {
         program.parse_args(argc, argv);
     } catch (const std::runtime_error& e) {
@@ -15,7 +18,8 @@ int main(int argc, char* argv[])
         std::cerr << program;
         return 1;
     }
-    if (program.is_subcommand_used(build_parser)) return build_main(build_parser);
+    if (program.is_subcommand_used(build_parser)) return build::main(build_parser);
+    else if (program.is_subcommand_used(query_parser)) return query::main(query_parser);
     else std::cerr << program << std::endl;
     return 0;
 }

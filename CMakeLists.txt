@@ -57,8 +57,9 @@ set(BIOLIB_SOURCES
 )
 
 set(KAMINARI_SOURCES
-  src/constants.cpp
+  src/utils.cpp
   src/build.cpp
+  src/query.cpp
   src/hybrid.cpp
 )
 

@@ -1,20 +1,22 @@
 #include <string>
 #include <iostream>
 #include <fstream>
-#include <thread>
-#include "../include/constants.hpp"
-#include "../include/build.hpp"
 #include "../include/index.hpp"
 #include "../include/hybrid.hpp"
+#include "../include/utils.hpp"
+#include "../include/constants.hpp"
+#include "../include/build_options.hpp"
+#include "../include/build.hpp"
 
-namespace kaminari {
 
-opt_t check_args(const argparse::ArgumentParser& parser);
+namespace kaminari::build {
 
-int build_main(const argparse::ArgumentParser& parser) 
+options_t check_args(const argparse::ArgumentParser& parser);
+
+int main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    minimizer::index<color_classes::hybrid, std::vector<color_t>> idx(opts);
+    minimizer::index<color_classes::hybrid, std::vector<color_classes::hybrid::color_t>> idx(opts);
     if (opts.verbose) {
         idx.memory_breakdown(std::cerr);
         std::cerr << "\n";
@@ -28,10 +30,10 @@ int build_main(const argparse::ArgumentParser& parser)
     return 0;
 }
 
-argparse::ArgumentParser get_parser_build()
+argparse::ArgumentParser get_parser()
 {
     argparse::ArgumentParser parser("build");
-    parser.add_description("Build a kaminari index from a colored compacted de Bruijn Graph");
+    parser.add_description("Build a kaminari index from a list of datasets");
     parser.add_argument("-i", "--input-list")
         .help("list of input files")
         .nargs(argparse::nargs_pattern::at_least_one)
@@ -81,22 +83,11 @@ argparse::ArgumentParser get_parser_build()
     return parser;
 }
 
-opt_t::fn_t read_filenames(std::string const& filenames_list) 
+options_t check_args(const argparse::ArgumentParser& parser)
 {
-    opt_t::fn_t buffer;
-    std::ifstream in(filenames_list);
-    if (!in.is_open()) throw std::runtime_error("error in opening file");
-    std::string filename;
-    while (in >> filename) buffer.push_back(filename);
-    in.close();
-    return buffer;
-}
-
-opt_t check_args(const argparse::ArgumentParser& parser)
-{
-    opt_t opts;
+    options_t opts;
     std::size_t tmp;
-    opts.input_filenames = parser.get<opt_t::fn_t>("-i");
+    opts.input_filenames = parser.get<std::vector<std::string>>("-i");
     opts.output_filename = parser.get<std::string>("-o");
     opts.tmp_dir = parser.get<std::string>("--tmp-dir");
     
@@ -126,7 +117,7 @@ opt_t check_args(const argparse::ArgumentParser& parser)
     if (opts.check and opts.nthreads != 1) {
         std::cerr << "[Warning] Checking does not support multi-threading\n";
     }
-    if (opts.input_filenames.size() == 1) opts.input_filenames = read_filenames(opts.input_filenames.at(0));
+    if (opts.input_filenames.size() == 1) opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
     return opts;
 }
 
