@@ -26,10 +26,10 @@ class index
 
         index();
         index(const build::options_t& build_parameters);
-        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l) const noexcept;
-        std::vector<color_t> query_full_intersection(const std::string& q) const noexcept {return query_full_intersection(q.c_str(), q.length());}
-        std::vector<color_t> query_threshold_union(char const * const q, const std::size_t l, const double threhsold) const noexcept;
-        std::vector<color_t> query_threshold_union(const std::string& q, const double threshold) const noexcept {return query_threshold_union(q.c_str(), q.length(), threshold);}
+        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level = 0) const noexcept;
+        std::vector<color_t> query_full_intersection(const std::string& q, std::size_t verbosity_level = 0) const noexcept {return query_full_intersection(q.c_str(), q.length());}
+        std::vector<color_t> query_threshold_union(char const * const q, const std::size_t l, const double threhsold, std::size_t verbosity_level = 0) const noexcept;
+        std::vector<color_t> query_threshold_union(const std::string& q, const double threshold, std::size_t verbosity_level = 0) const noexcept {return query_threshold_union(q.c_str(), q.length(), threshold);}
         void memory_breakdown(std::ostream& out) const noexcept;
         
         template <class Visitor>
@@ -53,8 +53,8 @@ class index
 
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
-        std::vector<color_t> dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
-        std::vector<color_t> mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
+        std::vector<color_t> dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept;
+        std::vector<color_t> mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept;
         
         std::vector<std::string> m_filenames;
         uint8_t k;
@@ -269,7 +269,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept
+METHOD_HEADER::dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept
 {
     std::vector<color_t> tmp;
     { // step 1: take the union of complementary sets
@@ -320,7 +320,7 @@ METHOD_HEADER::dense_intersection(std::vector<typename ColorClasses::row_accesso
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept
+METHOD_HEADER::mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept
 {
     std::sort(
         color_id_itrs.begin(),
@@ -356,8 +356,9 @@ METHOD_HEADER::mixed_intersection(std::vector<typename ColorClasses::row_accesso
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l) const noexcept
+METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level) const noexcept
 {
+    if (verbosity_level > 0) std::cerr << "step 1: collect color class ids\n";
     std::vector<std::size_t> ccids;
     { // collect color class ids
         std::size_t contig_mmer_count;
@@ -368,6 +369,7 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         }
     }
 
+    if (verbosity_level > 0) std::cerr << "step 2: ids to colors\n";
     std::vector<typename ColorClasses::row_accessor> color_itrs;
     bool all_very_dense = true;
     {
@@ -385,15 +387,19 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
             }
         }
     }
-
+    if (verbosity_level > 0) {
+        std::cerr << "step 3: computing intersections\n";
+        if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
+        else std::cerr << "\tcompute mixed intersection (dense and sparse vectors)\n"; 
+    }
     if (color_itrs.empty()) return {};
-    if (all_very_dense) return dense_intersection(std::move(color_itrs)); // intersect of dense rows
-    else return mixed_intersection(std::move(color_itrs)); // intersect dense and sparse rows
+    if (all_very_dense) return dense_intersection(std::move(color_itrs), verbosity_level); // intersect of dense rows
+    else return mixed_intersection(std::move(color_itrs), verbosity_level); // intersect dense and sparse rows
 }
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t>
-METHOD_HEADER::query_threshold_union(char const * const q, std::size_t l, const double threshold) const noexcept
+METHOD_HEADER::query_threshold_union(char const * const q, std::size_t l, const double threshold, std::size_t verbosity_level) const noexcept
 {
     std::vector<color_t> colors;
     

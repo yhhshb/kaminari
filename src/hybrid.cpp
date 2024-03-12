@@ -212,7 +212,7 @@ hybrid::row_accessor::next_geq(uint64_t lower_bound)
         comp_next_geq(lower_bound);
         m_curr_val = lower_bound;
     } else {
-        while (value() < lower_bound) m_parser.next_1();
+        while (value() < lower_bound) next();
     }
     assert(value() >= lower_bound);
 }
@@ -300,6 +300,7 @@ hybrid::colors_at(std::size_t color_class_id) const
 {
     assert(color_class_id < num_color_classes());
     uint64_t begin = m_offsets.at(color_class_id);
+    // std::cerr << "color class ID = " << color_class_id << " --> offset = " << begin << "\n"; 
     return row_accessor(this, begin);
 }
 
