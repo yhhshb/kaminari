@@ -28,8 +28,6 @@ class index
         index(const build::options_t& build_parameters);
         std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level = 0) const noexcept;
         std::vector<color_t> query_full_intersection(const std::string& q, std::size_t verbosity_level = 0) const noexcept {return query_full_intersection(q.c_str(), q.length());}
-        std::vector<color_t> query_threshold_union(char const * const q, const std::size_t l, const double threhsold, std::size_t verbosity_level = 0) const noexcept;
-        std::vector<color_t> query_threshold_union(const std::string& q, const double threshold, std::size_t verbosity_level = 0) const noexcept {return query_threshold_union(q.c_str(), q.length(), threshold);}
         void memory_breakdown(std::ostream& out) const noexcept;
         
         template <class Visitor>
@@ -334,7 +332,7 @@ METHOD_HEADER::mixed_intersection(std::vector<typename ColorClasses::row_accesso
         color_t candidate = color_id_itrs.front().value();
         std::size_t i = 1;
         while (candidate < m_filenames.size()) {
-            for (; i != color_id_itrs.size(); ++i) {
+            for (; i < color_id_itrs.size(); ++i) {
                 color_id_itrs[i].next_geq(candidate);
                 color_t val = color_id_itrs.at(i).value();
                 if (val != candidate) {
@@ -376,12 +374,6 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         auto last = std::unique(ccids.begin(), ccids.end()); // deduplicate color class ids
         for (auto itr = ccids.begin(); itr != last; ++itr) { 
             color_itrs.push_back(m_ccs.colors_at(*itr));
-
-            // IMPROVEMENT 
-            // Divide rows based on dense/sparse 
-            // 1) apply dense_intersection to the dense dataset 
-            // 2) and the complementary iterators from the sparse set <-- Not sure about this
-            // make the complementary of the result of (2) and make another intersection for the final result
             if (color_itrs.back().type() != ColorClasses::row_accessor::complementary_delta_gaps) {
                 all_very_dense = false;
             }
@@ -395,15 +387,6 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
     if (color_itrs.empty()) return {};
     if (all_very_dense) return dense_intersection(std::move(color_itrs), verbosity_level); // intersect of dense rows
     else return mixed_intersection(std::move(color_itrs), verbosity_level); // intersect dense and sparse rows
-}
-
-CLASS_HEADER
-std::vector<typename METHOD_HEADER::color_t>
-METHOD_HEADER::query_threshold_union(char const * const q, std::size_t l, const double threshold, std::size_t verbosity_level) const noexcept
-{
-    std::vector<color_t> colors;
-    
-    return colors;
 }
 
 CLASS_HEADER
