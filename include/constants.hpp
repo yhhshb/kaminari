@@ -1,6 +1,7 @@
 #ifndef KAMINARI_CONSTANTS_HPP
 #define KAMINARI_CONSTANTS_HPP
 
+#include <cstdint>
 #include <cstddef>
 #include <zlib.h>
 extern "C" {
