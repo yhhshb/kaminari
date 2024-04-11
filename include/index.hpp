@@ -1,6 +1,8 @@
 #ifndef KAMINARI_INDEX_HPP
 #define KAMINARI_INDEX_HPP
 
+
+
 #include <iostream>
 #include "../bundled/pthash/include/pthash.hpp"
 #include "utils.hpp"
@@ -9,7 +11,8 @@
 #include "constants.hpp"
 #include "minimizer.hpp"
 
-// #include "../bundled/biolib/bundled/prettyprint.hpp"
+#include <unordered_map>
+#include "../bundled/biolib/bundled/prettyprint.hpp"
 
 namespace kaminari {
 namespace minimizer {
@@ -131,10 +134,11 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         build_parameters.tmp_dir, 
         utils::get_tmp_filename("", "minimizer_unitig_id", run_id)
     );
+    std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
         float fraction = 0.1;
-        std::size_t id = 0;
+        color_t id = 0;
         std::size_t total_kmers = 0;
         std::size_t total_mmers = 0;
         std::size_t total_minimizers = 0;
@@ -175,6 +179,29 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                     tmp_sorted_storage.push_back(std::make_pair(*itr, id));
                 }
                 mms_buffer.clear();
+
+                if (build_parameters.check) {
+                    std::vector<::minimizer::record_t> kmer_buffer;
+                    std::size_t dummy;
+                    [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
+                        seq->seq.s,
+                        seq->seq.l,
+                        build_parameters.k,
+                        build_parameters.k,
+                        static_cast<uint64_t>(0),
+                        false, // minimizers are canonical or not, kmers are kept as they are for checking
+                        dummy,
+                        kmer_buffer
+                    );
+                    // auto last = std::unique(kmer_buffer.begin(), kmer_buffer.end());
+                    for (auto itr = kmer_buffer.begin(); itr != kmer_buffer.end(); ++itr) {
+                        if (kmer_color_check.find(itr->itself) == kmer_color_check.end()) {
+                            kmer_color_check.emplace(itr->itself, std::vector<color_t> {id});
+                        } else if (kmer_color_check[itr->itself].back() != id) { // this takes care of duplicates
+                            kmer_color_check[itr->itself].push_back(id);
+                        }
+                    }
+                }
             }
             if (seq) kseq_destroy(seq);
             gzclose(fp);
@@ -238,12 +265,18 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         fflush(stdout);
         dup2(backup, 1);
         close(backup);
+        assert(hf.num_keys() == unique_minimizers.size());
     }
 
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
         m_map.resize(hf.num_keys());
+        if (build_parameters.check) {
+            if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
+            for (std::size_t i = 0; i < m_map.size(); ++i) 
+                m_map[i] = std::numeric_limits<typename ColorMapper::value_type>::max();
+        }
         uint32_t cid = 0;
         auto itr = sorted_color_lists.cbegin();
         while(itr != sorted_color_lists.cend()) {
@@ -251,7 +284,11 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
             while(itr != sorted_color_lists.cend() and (*itr).first == current_color) {
                 auto minimizer = (*itr).second;
-                m_map[hf(minimizer)] = cid;
+                auto mp_idx = hf(minimizer);
+                // std::cerr << minimizer << " -> " << mp_idx << "\n";
+                if (build_parameters.check and m_map[mp_idx] != std::numeric_limits<typename ColorMapper::value_type>::max())
+                    throw std::runtime_error("[check fail] reassigning id of unique minimizer (the minimizer is not unique)");
+                m_map[mp_idx] = cid;
                 ++itr;
             }
             ++cid;
@@ -262,6 +299,64 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     if (build_parameters.verbose > 0) {
         std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
+    }
+
+    if (build_parameters.check) {
+        color_t id = 0;
+        gzFile fp = nullptr;
+        kseq_t* seq = nullptr;
+        std::vector<::minimizer::record_t> mms_buffer;
+        for (auto filename : m_filenames) {
+            if ((fp = gzopen(filename.c_str(), "r")) == NULL)
+                throw std::runtime_error("Unable to open input file " + filename);
+            seq = kseq_init(fp);
+            while (kseq_read(seq) >= 0) {
+                for (std::size_t i = 0; seq->seq.l >= k and i < seq->seq.l - build_parameters.k + 1; ++i) {
+                    bool valid_kmer = true;
+                    for (auto j = 0; j < k; ++j) {
+                        if (::constants::seq_nt4_table[static_cast<uint8_t>(*(seq->seq.s + i + j))] >= 4) valid_kmer = false; 
+                    }
+                    if (valid_kmer) {
+                        auto color = query_full_intersection(&seq->seq.s[i], build_parameters.k, 0);
+                        assert(color.size());
+                        std::size_t dummy;
+                        [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
+                            &seq->seq.s[i], 
+                            build_parameters.k, 
+                            build_parameters.k, 
+                            build_parameters.k, 
+                            0, 
+                            false, 
+                            dummy,
+                            mms_buffer
+                        );
+                        assert(mms_buffer.size() <= 1); // there might be N's in the input so 0 valid k-mers
+                        if (mms_buffer.size() == 1) {
+                            auto color_check = kmer_color_check[mms_buffer.at(0).itself];
+                            assert(color_check.size() <= color.size());
+                            std::vector<color_t> diff;
+                            std::set_symmetric_difference(
+                                color.begin(), color.end(),
+                                color_check.begin(), color_check.end(),
+                                std::back_inserter(diff)
+                            );
+                            if (diff.size() != (color.size() - color_check.size())) {
+                                std::cerr << color << "\n";
+                                std::cerr << color_check << "\n";
+                                throw std::runtime_error("[check fail] minimizer colors are not a strict superset of the kmer color");
+                            }
+                        }
+                    }
+                    mms_buffer.clear();
+                }
+            }
+            if (seq) kseq_destroy(seq);
+            gzclose(fp);
+            fp = nullptr;
+            seq = nullptr;
+            ++id;
+        }
+        std::cerr << "[check PASS] Everything is ok\n";
     }
 }
 
@@ -308,6 +403,7 @@ METHOD_HEADER::dense_intersection(std::vector<typename ColorClasses::row_accesso
             }
             candidate += 1;  // skip the candidate because it is equal to tmp[i]
         }
+        // std::cerr << "remaining candidate = " << candidate << " (input datasets: " << m_filenames.size() << ")\n";
         while (candidate < m_filenames.size()) {
             colors.push_back(candidate);
             candidate += 1;
@@ -356,7 +452,7 @@ CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
 METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level) const noexcept
 {
-    if (verbosity_level > 0) std::cerr << "step 1: collect color class ids\n";
+    if (verbosity_level > 2) std::cerr << "step 1: collect color class ids\n";
     std::vector<std::size_t> ccids;
     { // collect color class ids
         std::size_t contig_mmer_count;
@@ -365,9 +461,10 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         for (const auto& record : mms_buffer) { 
             ccids.push_back(m_map.at(hf(record.itself)));
         }
+        if (verbosity_level > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
     }
-
-    if (verbosity_level > 0) std::cerr << "step 2: ids to colors\n";
+    if (verbosity_level > 3) std::cerr << ccids << "\n";
+    if (verbosity_level > 2) std::cerr << "step 2: ids to colors\n";
     std::vector<typename ColorClasses::row_accessor> color_itrs;
     bool all_very_dense = true;
     {
@@ -379,10 +476,10 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
             }
         }
     }
-    if (verbosity_level > 0) {
+    if (verbosity_level > 2) {
         std::cerr << "step 3: computing intersections\n";
         if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
-        else std::cerr << "\tcompute mixed intersection (dense and sparse vectors)\n"; 
+        else std::cerr << "\tcompute mixed intersection (for a mix of dense and sparse vectors)\n"; 
     }
     if (color_itrs.empty()) return {};
     if (all_very_dense) return dense_intersection(std::move(color_itrs), verbosity_level); // intersect of dense rows

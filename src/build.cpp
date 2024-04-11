@@ -117,6 +117,9 @@ options_t check_args(const argparse::ArgumentParser& parser)
     if (opts.check and opts.nthreads != 1) {
         std::cerr << "[Warning] Checking does not support multi-threading\n";
     }
+    if (opts.check and opts.k > 32) {
+        throw std::runtime_error("Checking for correctness supports uint64_t k-mers only");
+    }
     if (opts.input_filenames.size() == 1) opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
     return opts;
 }
