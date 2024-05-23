@@ -103,9 +103,9 @@ METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
     scale.visit(m_ccs);
     out << "Colors weight: " << scale.get_byte_size() << " Bytes\n";
     scale.reset();
-    scale.visit(m_map);
-    out << "The mapping from minimizers to colors weights: " << scale.get_byte_size() << " Bytes\n";
-    scale.reset();
+    //scale.visit(m_map);
+    out << "The mapping from minimizers to colors weights: " << m_map.bytes() << " Bytes\n";
+    //scale.reset();
 }
 
 CLASS_HEADER
@@ -121,7 +121,7 @@ METHOD_HEADER::visit(Visitor& visitor)
     visitor.visit(pthash_constant);
     visitor.visit(hf); // lphash mphf
     visitor.visit(m_ccs); // colors
-    visitor.visit(m_map); // map between mphf values and color classes
+    //visitor.visit(m_map); // map between mphf values and color classes
 }
 
 CLASS_HEADER
@@ -271,12 +271,15 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-        m_map.resize(hf.num_keys());
+        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
+
         if (build_parameters.check) {
             if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
-            for (std::size_t i = 0; i < m_map.size(); ++i) 
-                m_map[i] = std::numeric_limits<typename ColorMapper::value_type>::max();
+            for (std::size_t i = 0; i < hf.num_keys(); ++i) 
+                m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
         }
+        
+
         uint32_t cid = 0;
         auto itr = sorted_color_lists.cbegin();
         while(itr != sorted_color_lists.cend()) {
@@ -286,14 +289,18 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 auto minimizer = (*itr).second;
                 auto mp_idx = hf(minimizer);
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
-                if (build_parameters.check and m_map[mp_idx] != std::numeric_limits<typename ColorMapper::value_type>::max())
-                    throw std::runtime_error("[check fail] reassigning id of unique minimizer (the minimizer is not unique)");
-                m_map[mp_idx] = cid;
+                if (build_parameters.check) { //super super slow but how to access in builder ?
+                    pthash::compact_vector check_m_map;
+                    m_map_builder.build(check_m_map);
+                    if (check_m_map[mp_idx] != (1 << m_map_builder.width()) - 1) throw std::runtime_error("[check fail] reassigning id of unique minimizer (the minimizer is not unique)");
+                }
+                m_map_builder.set(mp_idx, cid);
                 ++itr;
             }
             ++cid;
         }
         cbuild.build(m_ccs);
+        m_map_builder.build(m_map);
     }
 
     if (build_parameters.verbose > 0) {
@@ -459,7 +466,7 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         std::vector<::minimizer::record_t> mms_buffer;
         [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            ccids.push_back(m_map.at(hf(record.itself)));
+            ccids.push_back(m_map[hf(record.itself)]);
         }
         if (verbosity_level > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
     }

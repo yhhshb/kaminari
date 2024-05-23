@@ -16,7 +16,7 @@ options_t check_args(const argparse::ArgumentParser& parser);
 int main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    minimizer::index<color_classes::hybrid, std::vector<color_classes::hybrid::color_t>> idx(opts);
+    minimizer::index<color_classes::hybrid, pthash::compact_vector> idx(opts);
     if (opts.verbose) {
         idx.memory_breakdown(std::cerr);
         std::cerr << "\n";
