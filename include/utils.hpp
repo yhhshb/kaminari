@@ -9,6 +9,28 @@ namespace kaminari::utils {
 std::vector<std::string> read_filenames(std::string const& filenames_list);
 std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, uint64_t run_identifier);
 
+template<class ForwardIt>
+ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
+{
+    if (first == last)
+        return last;
+ 
+    ForwardIt result = first;
+    while (++first != last) {
+        // if the first elements are the same, accumulate the second values
+        if (result->first == first->first) {
+            result->second += first->second;
+        } else {
+            // move to the next unique element
+            if (++result != first) {
+                *result = std::move(*first);
+            }
+        }
+    }
+ 
+    return ++result;
+}
+
 } // namespace kaminari::utils
 
 #endif // KAMINARI_UTILS_HPP

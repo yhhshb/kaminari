@@ -10,8 +10,8 @@ namespace minimizer {
 struct record_t {
     uint64_t itself;
     uint64_t id;
-    uint8_t p1;
-    uint8_t size;
+    uint32_t p1;
+    uint32_t size;
 };
 #pragma pack(pop)
 
@@ -32,8 +32,8 @@ struct mm_quartet_t {
     uint64_t hash;  // minimizer hash
     uint64_t id;
     uint64_t itself;  // 2-bit minimizer itself
-    uint8_t p1;       // position inside first k-mer of the super-k-mer
-    uint8_t size;     // size (number of k-mers) in the super-k-mer
+    uint32_t p1;       // position inside first k-mer of the super-k-mer
+    uint32_t size;     // size (number of k-mers) in the super-k-mer
 };
 
 template <typename MinimizerHasher, class VectorType>

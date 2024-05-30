@@ -17,7 +17,7 @@ options_t check_args(const argparse::ArgumentParser& parser);
 int main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    minimizer::index<color_classes::hybrid, std::vector<color_classes::hybrid::color_t>> idx;
+    minimizer::index<color_classes::hybrid, pthash::compact_vector> idx;
     {
         std::ifstream in(opts.index_filename, std::ios::binary);
         loader loader(in);
@@ -42,7 +42,7 @@ int main(const argparse::ArgumentParser& parser)
             throw std::runtime_error("Unable to open input file " + filename);
         seq = kseq_init(fp);
         while (kseq_read(seq) >= 0) {
-            auto ids = idx.query_full_intersection(seq->seq.s, seq->seq.l, opts.verbose);
+            auto ids = idx.query_full_intersection(seq->seq.s, seq->seq.l, opts.threshold_ratio, opts.verbose);
             out << std::string(seq->name.s, seq->name.l) << "\n";
             out << ids << "\n";
         }
@@ -73,6 +73,9 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-d", "--tmp-dir")
         .help("temporary directory")
         .default_value(std::string("."));
+    parser.add_argument("-r", "--ratio")
+        .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
+        .default_value(std::string("1.0"));
     parser.add_argument("-g", "--max-ram")
         .help("RAM limit (GB) [4]")
         .scan<'d', std::size_t>()
@@ -102,6 +105,16 @@ options_t check_args(const argparse::ArgumentParser& parser)
         tmp = 1;
     }
     opts.max_ram = tmp;
+
+    std::string ratio_str = parser.get<std::string>("--ratio");
+    opts.threshold_ratio = std::stof(ratio_str);
+
+    if (opts.threshold_ratio <= 0.0 || opts.threshold_ratio > 1.0) {
+        std::cerr << "Warning: kmer ratio needs to be somewhere in ]0.0, 1.0] , setting it to 1.0\n";
+        opts.threshold_ratio = 1;
+    }
+    
+
     opts.verbose = parser.get<std::size_t>("--verbose");
 
     // if (opts.check and opts.nthreads != 1) {

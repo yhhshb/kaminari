@@ -135,7 +135,7 @@ hybrid::builder::build(hybrid& h)
 hybrid::row_accessor::row_accessor(hybrid const* parent_colors_storage, std::size_t start_idx)
     : m_parent(parent_colors_storage)
     , m_begin(start_idx)
-    // , m_num_docs(ptr.m_num_docs)
+    , m_orig(start_idx)
     , m_pos_in_list(0)
     , m_prev_val(-1)
     , m_curr_val(0) 
@@ -234,6 +234,37 @@ hybrid::row_accessor::reinit_for_complemented_set_iteration()
     } else {
         m_comp_val = m_parent->m_num_docs;
     }
+}
+
+void 
+hybrid::row_accessor::reset() 
+{
+    m_pos_in_list = 0;
+    m_prev_val = -1;
+    m_curr_val = 0; 
+    m_comp_list_size = 0;
+    m_pos_in_comp_list = 0;
+    m_comp_val = -1;
+    m_parser = bit_parser(m_parent->m_colors.data(), m_parent->m_colors.block_size(), m_orig);
+    m_size = bit::decoder::delta(m_parser);
+    
+    if (m_type == list_type::complementary_delta_gaps) {
+        m_comp_list_size = m_parent->m_num_docs - m_size;
+        if (m_comp_list_size > 0) m_comp_val = bit::decoder::delta(m_parser);
+        find_next();
+    }
+    else if (m_type == list_type::delta_gaps) {
+        m_curr_val = bit::decoder::delta(m_parser);
+    } 
+    else {
+        assert(m_type == list_type::bitmap);
+        m_begin = m_parser.get_bit_index();
+        m_parser.reset_and_clear_low_bits(m_begin);
+        uint64_t pos = m_parser.next_1();
+        assert(pos >= m_begin);
+        m_curr_val = pos - m_begin;
+    }
+    return;
 }
 
 hybrid::row_accessor::value_type 

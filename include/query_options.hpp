@@ -13,6 +13,7 @@ struct options_t {
     std::string tmp_dir;
     uint8_t nthreads;
     std::size_t max_ram;
+    float threshold_ratio;
     std::size_t verbose;
 };
 

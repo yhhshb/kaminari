@@ -66,6 +66,8 @@ class hybrid
                 void comp_next();
                 void comp_next_geq(uint64_t lower_bound);
 
+                void reset();
+
                 list_type type() const;
                 std::size_t size() const;
                 
@@ -73,6 +75,7 @@ class hybrid
                 hybrid const* m_parent;
                 bit_parser m_parser;
                 uint64_t m_begin;
+                uint64_t m_orig;
                 list_type m_type;
 
                 uint32_t m_size;
