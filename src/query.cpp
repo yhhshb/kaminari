@@ -42,7 +42,7 @@ int main(const argparse::ArgumentParser& parser)
             throw std::runtime_error("Unable to open input file " + filename);
         seq = kseq_init(fp);
         while (kseq_read(seq) >= 0) {
-            auto ids = idx.query_full_intersection(seq->seq.s, seq->seq.l, opts.threshold_ratio, opts.verbose);
+            auto ids = idx.query_union_threshold(seq->seq.s, seq->seq.l, opts.threshold_ratio, opts.verbose);
             out << std::string(seq->name.s, seq->name.l) << "\n";
             out << ids << "\n";
         }
