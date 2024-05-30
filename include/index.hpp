@@ -32,11 +32,8 @@ class index
 
         index();
         index(const build::options_t& build_parameters);
-        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
-        std::vector<color_t> query_full_intersection(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return query_full_intersection(q.c_str(), q.length(), threshold_ratio);}
-        
-        std::vector<color_t> query_union_treshold(char const * const q, const std::size_t l, std::size_t verbosity_level = 0) const noexcept;
-        std::vector<color_t> query_union_treshold(const std::string& q, std::size_t verbosity_level = 0) const noexcept {return query_union_treshold(q.c_str(), q.length());}
+        std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
+        std::vector<color_t> query_union_threshold(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return query_union_threshold(q.c_str(), q.length(), threshold_ratio);}
         
         void memory_breakdown(std::ostream& out) const noexcept;
         
@@ -332,7 +329,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                         if (::constants::seq_nt4_table[static_cast<uint8_t>(*(seq->seq.s + i + j))] >= 4) valid_kmer = false; 
                     }
                     if (valid_kmer) {
-                        auto color = query_full_intersection(&seq->seq.s[i], build_parameters.k, 0);
+                        auto color = query_union_threshold(&seq->seq.s[i], build_parameters.k, 0);
                         assert(color.size());
                         std::size_t dummy;
                         [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
@@ -521,7 +518,7 @@ METHOD_HEADER::mixed_intersection_victor(std::vector<std::pair<typename ColorCla
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level) const noexcept
+METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level) const noexcept
 {
     if (verbosity_level > 2) std::cerr << "step 1: collect color class ids\n";
     if (verbosity_level > 3) std::cerr << "s : " << q << " l : " << l << "\n"; 
