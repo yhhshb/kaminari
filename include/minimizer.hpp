@@ -2,6 +2,7 @@
 #define MINIMIZER_HPP
 
 #include <vector>
+#include <string>
 #include "../bundled/biolib/include/constants.hpp"
 
 namespace minimizer {
@@ -56,13 +57,27 @@ uint64_t from_string(
     uint64_t nbases_since_last_break = 0;
     uint32_t sks = 0, p1 = 0;
     uint64_t kmer_count;
-    std::vector<mm_quartet_t> buffer(k - m + 1);
+    std::vector<mm_quartet_t> buffer(k - m + 1); //minmers / 1kmer
     int c;
     uint8_t z;
     bool find_brand_new_min = false;
 
     auto update_output = [](decltype(accumulator)& accumulator, mm_quartet_t const& added) {
         accumulator.push_back({added.itself, added.id, added.p1, added.size});
+    };
+
+    auto bit_to_nuc = [](uint64_t bits, uint32_t len) {
+        std::string nuc;
+        for (uint32_t i = 0; i < len; ++i) {
+            uint8_t b = (bits >> (2 * (len - i - 1))) & 3;
+            switch (b) {
+                case 0: nuc += 'A'; break;
+                case 1: nuc += 'C'; break;
+                case 2: nuc += 'G'; break;
+                case 3: nuc += 'T'; break;
+            }
+        }
+        return nuc;
     };
 
     assert(k >= m);
@@ -72,45 +87,58 @@ uint64_t from_string(
     kmer_count = 0;
     mm_count = 0;
     z = 0;
+
+
     for (uint64_t i = 0; i < contig_size; ++i) {
+        //std::cerr << "i " << i << " contig[i] " << contig[i] << "\n";
         c = constants::seq_nt4_table[static_cast<uint8_t>(contig[i])];
         current.clear();
-        if (c < 4) [[likely]] {
+        if (c < 4) [[likely]] { //a t c or g (caps or not)
                 mm[0] = (mm[0] << 2 | c) & mask;            // forward m-mer
                 mm[1] = (mm[1] >> 2) | (3ULL ^ c) << shift; // reverse m-mer
                 if (canonical_m_mers && mm[0] != mm[1]) z = mm[0] < mm[1] ? 0 : 1;  // strand, if symmetric k-mer then use previous strand
                 ++nbases_since_last_break;
-                if (nbases_since_last_break >= m) {
-                    current.itself = mm[z];
-                    current.hash = MinimizerHasher::hash(mm[z], seed);  // insert new hash inside buffer
+                if (nbases_since_last_break >= m) { //at least size of minmer (m)
+                    /*std::cerr << "\tnb_bases >= m, \n" <<
+                                    "\t\t forward : " << mm[0] << " = " << bit_to_nuc(mm[0], m) << "\n" <<
+                                    "\t\t reverse : " << mm[1] << " = " << bit_to_nuc(mm[1], m) << "\n" <<
+                                    "\t\t chosen : " << mm[z] << " = " << bit_to_nuc(mm[z], m) << "\n";*/
+                    current.itself = mm[z]; // itself = canonical encoded
+                    current.hash = MinimizerHasher::hash(mm[z], seed);  // insert new hash inside buffer (murmurhash)
+                    //std::cerr << "\t\t hash : " << current.hash << "\n";
                     current.p1 = i - m + 1;  // FIXME this is NOT the position inside the super-k-mer!
                     current.id = mm_count++;
                     if (nbases_since_last_break == k) ++kmer_count;
                     if (nbases_since_last_break == k + 1) [[unlikely]] {  
-                        // have seen the first window after a break, time to search
-                        // for the minimum note that the current m-mer is checked by
-                        // the next if
+                        // happens once, after seeing all the m-mers of the first kmer, time to check which one is the smallest (the minmer)
+                        //std::cerr << "unlikely bases_since_last_break == k + 1\n";
                         min_pos = p1 = 0;
+                        //smallest minmer according to murmurhash
                         for (std::size_t j = 0; j < buffer.size(); ++j) {
                             if (buffer[j].hash < buffer[min_pos].hash) {
                                 min_pos = j;
-                                p1 = min_pos;
                             }
                         }
+                        p1 = min_pos;
+                        //std::string tmp(contig + p1, m);
+                        //std::cerr << "=== Smallest minmer hash = " <<  buffer[p1].hash << " itself : " << buffer[p1].itself << " which corresponds to " << tmp << "\n";
                         sks = 1; // number of k-mers after a break is 1
                     }
                     if (nbases_since_last_break >= k + 1) [[likely]] {  // time to update the minimum, if necessary
+                        //std::cerr << "likely bases_since_last_break >= k + 1\n";
                         assert(sks != 0);
-                        assert(sks <= k - m + 1);
-                        if (((buf_pos) % buffer.size()) == min_pos) {  // old minimum outside window
+                        assert(sks <= k - m + 1); //sks is number of kmer in the superkmer
+                        if (((buf_pos) % buffer.size()) == min_pos) {  // old minimum outside window, time to save it and go next
                             buffer[min_pos].p1 = p1;
                             buffer[min_pos].size = sks;
+                            //std::cerr << "update output with : " << buffer[min_pos].itself << " = " << bit_to_nuc(buffer[min_pos].itself, m) << "\n";
                             update_output(accumulator, buffer[min_pos]);  // we save the old minimum, length on the right is k by definition
                             sks = 0;
                             find_brand_new_min = true;  // also update p1
                         } else if (current.hash < buffer[min_pos].hash) {
                             buffer[min_pos].p1 = p1;
                             buffer[min_pos].size = sks;
+                            //std::cerr << "update output(2) with : " << buffer[min_pos].itself << " = " << bit_to_nuc(buffer[min_pos].itself, m) << "\n";
                             update_output(accumulator, buffer[min_pos]);  // new minimum
                             sks = 0;
                             p1 = k - m;
@@ -118,6 +146,7 @@ uint64_t from_string(
                         }
                         ++sks;
                         ++kmer_count;
+
                     }
                     buffer[buf_pos++] = current;
                     buf_pos %= buffer.size();  // circular buffer
@@ -143,11 +172,12 @@ uint64_t from_string(
                     }
                 }
             }
-        else [[unlikely]] {
+        else [[unlikely]] { // N or other character
             nbases_since_last_break = 0;
             if (min_pos < buffer.size()) {
                 buffer[min_pos].p1 = p1;
                 buffer[min_pos].size = sks;
+                //std::cerr << "update output(3) with : " << buffer[min_pos].itself << " = " << bit_to_nuc(buffer[min_pos].itself, m) << "\n";
                 update_output(accumulator, buffer[min_pos]);  // push current minimum if available
             }
             sks = 0;  // impossible value, wait for reinitialization of the first window
@@ -169,6 +199,7 @@ uint64_t from_string(
     if (min_pos < buffer.size()) {
         buffer[min_pos].p1 = p1;
         buffer[min_pos].size = sks;
+        //std::cerr << "update output(4) with : " << buffer[min_pos].itself << " = " << bit_to_nuc(buffer[min_pos].itself, m) << "\n";
         update_output(accumulator, buffer[min_pos]);  // push last minimum if available
         sks = 1;
     }

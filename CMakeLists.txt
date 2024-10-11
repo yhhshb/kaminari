@@ -58,6 +58,9 @@ set(BIOLIB_SOURCES
 
 set(KAMINARI_SOURCES
   src/utils.cpp
+  src/psa/ranking_threshold_union_query.cpp
+  src/psa/threshold_union_query.cpp
+  src/psa/full_intersection_query.cpp
   src/build.cpp
   src/query.cpp
   src/hybrid.cpp

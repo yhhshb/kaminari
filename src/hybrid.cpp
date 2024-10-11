@@ -210,7 +210,10 @@ hybrid::row_accessor::next_geq(uint64_t lower_bound)
     assert(lower_bound <= m_parent->m_num_docs);
     if (m_type == list_type::complementary_delta_gaps) {
         comp_next_geq(lower_bound);
-        m_curr_val = lower_bound;
+        if (m_curr_val < lower_bound){
+            m_curr_val = lower_bound;
+        }
+        find_next();
     } else {
         while (value() < lower_bound) next();
     }

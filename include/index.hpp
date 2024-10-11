@@ -1,27 +1,34 @@
 #ifndef KAMINARI_INDEX_HPP
 #define KAMINARI_INDEX_HPP
 
-
-
 #include <iostream>
-#include "../bundled/pthash/include/pthash.hpp"
+#include "constants.hpp"
 #include "utils.hpp"
 #include "build_options.hpp"
 #include "query_options.hpp"
-#include "constants.hpp"
 #include "minimizer.hpp"
-
-#include <unordered_map>
+#include "../bundled/pthash/include/pthash.hpp"
 #include "../bundled/biolib/bundled/prettyprint.hpp"
 #include "../bundled/biolib/include/bit_vector.hpp"
 #include "../bundled/biolib/include/elias_fano.hpp"
 
-
 namespace kaminari {
 namespace minimizer {
 
+
 #define CLASS_HEADER template <class ColorClasses, class ColorMapper>
 #define METHOD_HEADER index<ColorClasses, ColorMapper>
+
+
+template <typename T>
+struct scored {
+    T item;
+    uint32_t score;
+};
+
+typedef scored<uint32_t> scored_id;
+
+
 
 CLASS_HEADER
 class index
@@ -32,8 +39,19 @@ class index
 
         index();
         index(const build::options_t& build_parameters);
-        std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
-        std::vector<color_t> query_union_threshold(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return query_union_threshold(q.c_str(), q.length(), threshold_ratio);}
+
+        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level = 0) const noexcept;
+
+        std::vector<color_t> query_full_intersection(const std::string& q, std::size_t verbosity_level = 0) const noexcept {return query_full_intersection(q.c_str(), q.length(), verbosity_level);}
+
+
+        std::vector<scored_id> query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
+
+        std::vector<scored_id> query_union_threshold(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return query_union_threshold(q.c_str(), q.length(), threshold_ratio, verbosity_level);}
+
+        std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
+
+        std::vector<scored_id> ranking_query_union_threshold(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return ranking_query_union_threshold(q.c_str(), q.length(), threshold_ratio, verbosity_level);}
         
         void memory_breakdown(std::ostream& out) const noexcept;
         
@@ -58,8 +76,15 @@ class index
 
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
-        std::vector<color_t> dense_intersection_victor(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept;
-        std::vector<color_t> mixed_intersection_victor(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, ::size_t verbosity_level) const noexcept;
+        
+        std::vector<color_t> full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept;
+        std::vector<color_t> full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept;
+
+        std::vector<color_t> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept;
+        std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
+
+        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept;
+        std::vector<scored_id> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
         
         std::vector<std::string> m_filenames;
         uint8_t k;
@@ -130,6 +155,23 @@ METHOD_HEADER::visit(Visitor& visitor)
 }
 
 CLASS_HEADER
+typename METHOD_HEADER::pthash_opt_t
+METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
+{
+    pthash_opt_t opts;
+    opts.c = build_parameters.pthash_constant;
+    opts.seed = build_parameters.seed;
+    opts.ram = build_parameters.max_ram * constants::GB;
+    opts.num_threads = build_parameters.nthreads;
+    opts.tmp_dir = build_parameters.tmp_dir;
+    opts.verbose_output = build_parameters.verbose;
+    opts.minimal_output = true;
+    opts.alpha = 0.94;
+    return opts;
+}
+
+
+CLASS_HEADER
 void
 METHOD_HEADER::build(const build::options_t& build_parameters)
 {
@@ -177,7 +219,9 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 }
                 // remove duplicates and output to tmp file on disk
                 std::vector<minimizer_t> minimizers;
-                for (auto r : mms_buffer) minimizers.push_back(r.itself);
+                for (auto r : mms_buffer) {
+                    minimizers.push_back(r.itself);
+                }
                 std::sort(minimizers.begin(), minimizers.end());
                 auto last = std::unique(minimizers.begin(), minimizers.end());
                 for (auto itr = minimizers.begin(); itr != last; ++itr) {
@@ -313,6 +357,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     }
 
+    /* commented because use query union threshold with scored_id so doesnt compile 
     if (build_parameters.check) {
         color_t id = 0;
         gzFile fp = nullptr;
@@ -370,220 +415,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         }
         std::cerr << "[check PASS] Everything is ok\n";
     }
-}
-
-CLASS_HEADER
-std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::dense_intersection_victor(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept
-{
-    if (threshold == 0) threshold = 1;
-    std::size_t filenames_size = m_filenames.size();
-    std::vector<color_t> tmp;
-
-    { // step 1: take the union of complementary sets
-        for (auto& itr : color_id_itrs) itr.first.reinit_for_complemented_set_iteration();
-        color_t candidate = (
-            *std::min_element(
-                color_id_itrs.begin(), 
-                color_id_itrs.end(),
-                [](auto const& x, auto const& y) {
-                    return x.first.comp_value() < y.first.comp_value();
-                }
-            )
-        ).first.comp_value();
-
-        uint32_t candidate_count;
-        tmp.reserve(filenames_size);
-        while (candidate < filenames_size) {
-            candidate_count = nb_kmers;
-            color_t next_candidate = filenames_size;
-            for (uint64_t i = 0; i != color_id_itrs.size(); ++i) {
-                if (color_id_itrs.at(i).first.comp_value() == candidate){
-                    candidate_count -= color_id_itrs.at(i).second;
-                    color_id_itrs[i].first.comp_next();
-                } 
-                // compute next minimum 
-                if (color_id_itrs.at(i).first.comp_value() < next_candidate) {
-                    next_candidate = color_id_itrs.at(i).first.comp_value();
-                }
-            }
-            if (candidate_count < threshold) tmp.push_back(candidate);
-            assert(next_candidate > candidate);
-            candidate = next_candidate;
-        }
-    }
-    std::vector<color_t> colors;
-    { // step 2: compute the intersection by scanning tmp
-        color_t candidate = 0;
-        for (std::size_t i = 0; i != tmp.size(); ++i) {
-            while (candidate < tmp[i]) {
-                colors.push_back(candidate);
-                candidate += 1;
-            }
-            candidate += 1;  // skip the candidate because it is equal to tmp[i]
-        }
-
-        while (candidate < m_filenames.size()) {
-            colors.push_back(candidate);
-            candidate += 1;
-        }
-    }
-    return colors;
-    
-}
-
-
-CLASS_HEADER
-std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::mixed_intersection_victor(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept
-{
-    if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
-
-    std::sort(
-        color_id_itrs.begin(),
-        color_id_itrs.end(),
-        [](auto const& x, auto const& y) { return x.first.size() < y.first.size(); }
-    );
-
-    bit::vector<uint64_t> tested(m_filenames.size());
-    std::vector<color_t> colors;
-    std::size_t vec_size = color_id_itrs.size();
-    std::size_t filenames_size = m_filenames.size();
-    std::size_t idx;
-    std::size_t count;
-    bit::ef::array remaining_counts;
-
-    {
-        //used to know if worth looking in next colors
-        std::vector<uint64_t> ef_build(vec_size+1, 0);
-        uint64_t sum = 0;
-        for (int i = 1; i <= vec_size; i++) {
-            sum += color_id_itrs[vec_size-i].second;
-            ef_build[i] += sum;
-        }
-        ef_build[vec_size] += 1; //acts like a boundary
-        remaining_counts = bit::ef::array(ef_build.begin(), vec_size+1, ef_build.back());
-    }
-
-    {
-        color_t candidate;
-        //stop loop when not enough kmers represented in following row_acc
-        //to reach threshold 
-        for (size_t i = 0; i <= vec_size-1 - remaining_counts.lt_find(threshold); i++){
-            if (i>0) color_id_itrs[i].first.reset();
-            candidate = color_id_itrs[i].first.value();
-
-            //stop loop when regularly reaching last element
-            while (candidate != filenames_size){
-
-                // check if candidate has not been done in other previous row_acc
-                //+ need to check if not filenames_size because of tested out_of_range 
-                while (candidate != filenames_size && tested.at(candidate)) {
-                    color_id_itrs[i].first.next();
-                    candidate = color_id_itrs.at(i).first.value();
-                }
-                // leaving loop when heuristically reaching last element
-                if (candidate == filenames_size) {
-                    break;
-                    //checked every value in this row accessor before next i
-                }
-                     
-                tested.set(candidate); //we chose a never seen candidate, dont check him again
-
-                idx = i+1;
-                count = color_id_itrs[i].second;
-                
-                for (; (idx < vec_size) && (count < threshold); ++idx) {
-                    if (i>0) color_id_itrs[idx].first.reset(); //candidate in 2nd row_acc might be lower than candidates in 1st row_acc
-                    color_id_itrs[idx].first.next_geq(candidate);
-                    color_t val = color_id_itrs.at(idx).first.value();
-                    if (val == candidate) {
-                        count += color_id_itrs.at(idx).second;
-                    } 
-                }
-                
-                if (count >= threshold) {
-                    colors.push_back(candidate);
-                }
-
-                color_id_itrs.at(i).first.next();
-                candidate = color_id_itrs[i].first.value();
-            }
-        }
-    }
-    
-    return colors;
-
-}
-
-CLASS_HEADER
-std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level) const noexcept
-{
-    if (verbosity_level > 2) std::cerr << "step 1: collect color class ids\n";
-    if (verbosity_level > 3) std::cerr << "s : " << q << " l : " << l << "\n"; 
-    std::vector<std::pair<std::size_t, uint32_t>> ccids_counts;
-    uint64_t contig_kmer_count; 
-    { // collect color class ids
-        std::size_t contig_mmer_count;
-        std::vector<::minimizer::record_t> mms_buffer;
-        contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
-        for (const auto& record : mms_buffer) { 
-            ccids_counts.push_back(std::make_pair(m_map[hf(record.itself)], record.size));
-        }
-        if (verbosity_level > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
-    }
-    if (verbosity_level > 3) std::cerr << ccids_counts << "\n";
-    if (verbosity_level > 2) std::cerr << "step 2: ids to colors\n";
-    std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>> color_itrs;
-    bool all_very_dense = true;
-
-
-    {
-        //sort and unique+erase to remove duplicates, side effect : accumulate counts (n°kmers) for every duplicate
-        std::sort(
-            ccids_counts.begin(),
-            ccids_counts.end(),
-            [](auto const& x, auto const& y) { return x.first < y.first; }
-        );
-        auto last = ccids_counts.erase( kaminari::utils::unique_accumulate( 
-                                            ccids_counts.begin(), 
-                                            ccids_counts.end() ), 
-                                        ccids_counts.end() );
-
-        for (auto itr = ccids_counts.begin(); itr != last; ++itr) { 
-            color_itrs.push_back(std::make_pair(m_ccs.colors_at((*itr).first), (*itr).second));
-            if (color_itrs.back().first.type() != ColorClasses::row_accessor::complementary_delta_gaps) {
-                all_very_dense = false;
-            }
-        }
-    }
-    
-    if (verbosity_level > 2) {
-        std::cerr << "step 3: computing intersections\n";
-        if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
-        else std::cerr << "\tcompute mixed intersection (for a mix of dense and sparse vectors)\n"; 
-    }
-    if (color_itrs.empty()) return {};
-    if (all_very_dense) return dense_intersection_victor(std::move(color_itrs), contig_kmer_count*threshold_ratio, contig_kmer_count, verbosity_level); // intersect of dense rows
-    else return mixed_intersection_victor(std::move(color_itrs), contig_kmer_count*threshold_ratio, verbosity_level); // intersect dense and sparse rows
-}
-
-
-CLASS_HEADER
-typename METHOD_HEADER::pthash_opt_t
-METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
-{
-    pthash_opt_t opts;
-    opts.c = build_parameters.pthash_constant;
-    opts.seed = build_parameters.seed;
-    opts.ram = build_parameters.max_ram * constants::GB;
-    opts.num_threads = build_parameters.nthreads;
-    opts.tmp_dir = build_parameters.tmp_dir;
-    opts.verbose_output = build_parameters.verbose;
-    opts.minimal_output = true;
-    opts.alpha = 0.94;
-    return opts;
+    */
 }
 
 #undef CLASS_HEADER

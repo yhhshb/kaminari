@@ -2,6 +2,9 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+
+#include <chrono>
+
 #include "../include/index.hpp"
 #include "../include/hybrid.hpp"
 #include "../include/utils.hpp"
@@ -16,6 +19,8 @@ options_t check_args(const argparse::ArgumentParser& parser);
 
 int main(const argparse::ArgumentParser& parser) 
 {
+    std::chrono::steady_clock::time_point begin;
+
     auto opts = check_args(parser);
     minimizer::index<color_classes::hybrid, pthash::compact_vector> idx;
     {
@@ -38,16 +43,28 @@ int main(const argparse::ArgumentParser& parser)
     gzFile fp = nullptr;
     kseq_t* seq = nullptr;
     for (auto filename : opts.input_filenames) {
+        begin = std::chrono::steady_clock::now();
+
         if ((fp = gzopen(filename.c_str(), "r")) == NULL)
             throw std::runtime_error("Unable to open input file " + filename);
         seq = kseq_init(fp);
         while (kseq_read(seq) >= 0) {
-            auto ids = idx.query_union_threshold(seq->seq.s, seq->seq.l, opts.threshold_ratio, opts.verbose);
-            out << std::string(seq->name.s, seq->name.l) << "\n";
-            out << ids << "\n";
+            auto ids = idx.ranking_query_union_threshold(seq->seq.s, seq->seq.l, opts.threshold_ratio, opts.verbose);
+
+            std::sort(
+                ids.begin(),
+                ids.end(),
+                [](auto const& x, auto const& y) { return x.score > y.score; }
+            );
+
+            out << std::string(seq->name.s, seq->name.l) << "\t" << ids.size();
+            for (auto c : ids) { out << "\t(" << c.item << "," << c.score << ")"; }
+            out << "\n";
         }
         seq = nullptr;
         fp = nullptr;
+        
+        std::cerr << "query all seqs in file " << filename << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
     }
     return 0;
 }
