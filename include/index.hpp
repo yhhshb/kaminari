@@ -212,7 +212,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 total_kmers += contig_kmer_count;
                 total_mmers += contig_mmer_count;
                 total_minimizers += mms_buffer.size();
-                if (build_parameters.verbose > 2) {
+                if (build_parameters.verbose > 4) {
                     std::cerr << "\tRead contig:\n" 
                               << "\t\t" << contig_kmer_count << " k-mers\n"
                               << "\t\t" << contig_mmer_count << " m-mers\n"
