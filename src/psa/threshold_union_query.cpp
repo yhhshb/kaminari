@@ -24,7 +24,7 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         std::vector<::minimizer::record_t> mms_buffer;
         contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            std::cerr << "record : " << record.itself << "\n";
+            //std::cerr << "record : " << record.itself << "\n";
             ccids_counts.push_back(std::make_pair(m_map[hf(record.itself)], record.size));
         }
         if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
