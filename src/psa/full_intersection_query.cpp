@@ -11,9 +11,9 @@ template class index<kaminari::color_classes::hybrid, pthash::compact_vector>;
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level) const noexcept
+METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l, options_t& opts) const noexcept
 {
-    if (verbosity_level > 0) std::cerr << "step 1: collect color class ids\n";
+    if (opts.verbose > 0) std::cerr << "step 1: collect color class ids\n";
     std::vector<std::size_t> ccids;
     { // collect color class ids
         std::size_t contig_mmer_count;
@@ -24,7 +24,7 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         }
     }
 
-    if (verbosity_level > 0) std::cerr << "step 2: ids to colors\n";
+    if (opts.verbose > 0) std::cerr << "step 2: ids to colors\n";
     std::vector<typename ColorClasses::row_accessor> color_itrs;
     bool all_very_dense = true;
     {
@@ -42,14 +42,14 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
             }
         }
     }
-    if (verbosity_level > 0) {
+    if (opts.verbose > 0) {
         std::cerr << "step 3: computing intersections\n";
         if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
         else std::cerr << "\tcompute mixed intersection (dense and sparse vectors)\n"; 
     }
     if (color_itrs.empty()) return {};
-    if (all_very_dense) return full_dense_intersection(std::move(color_itrs), verbosity_level); // intersect of dense rows
-    else return full_mixed_intersection(std::move(color_itrs), verbosity_level); // intersect dense and sparse rows
+    if (all_very_dense) return full_dense_intersection(std::move(color_itrs), opts.verbose); // intersect of dense rows
+    else return full_mixed_intersection(std::move(color_itrs), opts.verbose); // intersect dense and sparse rows
 }
 
 

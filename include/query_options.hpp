@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <cstdint>
 
 namespace kaminari::query {
 
@@ -14,6 +15,7 @@ struct options_t {
     uint8_t nthreads;
     std::size_t max_ram;
     float threshold_ratio;
+    bool ranking;
     std::size_t verbose;
 };
 

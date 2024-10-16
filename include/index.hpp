@@ -36,22 +36,23 @@ class index
     public:
         typedef uint64_t minimizer_t;
         typedef typename ColorClasses::color_t color_t;
+        typedef typename kaminari::query::options_t options_t;
 
         index();
         index(const build::options_t& build_parameters);
 
-        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, std::size_t verbosity_level = 0) const noexcept;
+        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, options_t& opts) const noexcept;
 
-        std::vector<color_t> query_full_intersection(const std::string& q, std::size_t verbosity_level = 0) const noexcept {return query_full_intersection(q.c_str(), q.length(), verbosity_level);}
+        std::vector<color_t> query_full_intersection(const std::string& q, options_t& opts = 0) const noexcept {return query_full_intersection(q.c_str(), q.length(), opts);}
 
 
-        std::vector<scored_id> query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
+        std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
 
-        std::vector<scored_id> query_union_threshold(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return query_union_threshold(q.c_str(), q.length(), threshold_ratio, verbosity_level);}
+        std::vector<color_t> query_union_threshold(const std::string& q, options_t& opts = 0) const noexcept {return query_union_threshold(q.c_str(), q.length(), opts);}
 
-        std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept;
+        std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
 
-        std::vector<scored_id> ranking_query_union_threshold(const std::string& q, float threshold_ratio, std::size_t verbosity_level = 0) const noexcept {return ranking_query_union_threshold(q.c_str(), q.length(), threshold_ratio, verbosity_level);}
+        std::vector<scored_id> ranking_query_union_threshold(const std::string& q, options_t& opts) const noexcept {return ranking_query_union_threshold(q.c_str(), q.length(), opts);}
         
         void memory_breakdown(std::ostream& out) const noexcept;
         
@@ -84,7 +85,7 @@ class index
         std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
 
         std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept;
-        std::vector<scored_id> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
+        std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
         
         std::vector<std::string> m_filenames;
         uint8_t k;

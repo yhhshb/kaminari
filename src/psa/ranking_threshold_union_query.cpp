@@ -27,10 +27,10 @@ auto bit_to_nuc(uint64_t bits, uint32_t len) {
 
 CLASS_HEADER
 std::vector<scored_id> 
-METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::size_t l, float threshold_ratio, std::size_t verbosity_level) const noexcept
+METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept
 {
-    if (verbosity_level > 1) std::cerr << "step 1: collect color class ids\n";
-    if (verbosity_level > 2) std::cerr << "s : " << q << " l : " << l << "\n"; 
+    if (opts.verbose > 1) std::cerr << "step 1: collect color class ids\n";
+    if (opts.verbose > 2) std::cerr << "s : " << q << " l : " << l << "\n"; 
     std::vector<std::pair<std::size_t, uint32_t>> ccids_counts;
     uint64_t contig_kmer_count; 
     { // collect color class ids
@@ -41,9 +41,9 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
             //std::cerr << "record : " << record.itself << " -> " << bit_to_nuc(record.itself, m) << " -pthash> " <<  hf(record.itself) <<  " -ccid> " <<  m_map[hf(record.itself)] << " -size> " << record.size << "\n";
             ccids_counts.push_back(std::make_pair(m_map[hf(record.itself)], record.size));
         }
-        if (verbosity_level > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
+        if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
     }
-    if (verbosity_level > 3) std::cerr << ccids_counts << "\n";
+    if (opts.verbose > 3) std::cerr << ccids_counts << "\n";
 
 
     /* std::vector<uint32_t> pbs;
@@ -65,7 +65,7 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
     std::cerr << "tot : " << tot << "\n"; */
 
 
-    if (verbosity_level > 2) std::cerr << "step 2: ids to colors\n";
+    if (opts.verbose > 2) std::cerr << "step 2: ids to colors\n";
     std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>> color_itrs;
     bool all_very_dense = true;
 
@@ -82,7 +82,7 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
                                             ccids_counts.end() ), 
                                         ccids_counts.end() );
 
-        if (verbosity_level > 3) std::cerr << ccids_counts << " (post sort)\n";
+        if (opts.verbose > 3) std::cerr << ccids_counts << " (post sort)\n";
 
         
     
@@ -97,14 +97,14 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
 
     
     
-    if (verbosity_level > 2) {
+    if (opts.verbose > 2) {
         std::cerr << "step 3: computing intersections\n";
         if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
         else std::cerr << "\tcompute mixed intersection (for a mix of dense and sparse vectors)\n"; 
     }
     if (color_itrs.empty()) return {};
-    //if (all_very_dense) return ranking_dense_intersection(std::move(color_itrs), contig_kmer_count*threshold_ratio, contig_kmer_count, verbosity_level); // intersect of dense rows
-    return ranking_mixed_intersection(std::move(color_itrs), contig_kmer_count*threshold_ratio, verbosity_level); // intersect dense and sparse rows
+    //if (all_very_dense) return ranking_dense_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio, contig_kmer_count, opts.verbose); // intersect of dense rows
+    return ranking_mixed_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio, opts.verbose); // intersect dense and sparse rows
 }
 
 
