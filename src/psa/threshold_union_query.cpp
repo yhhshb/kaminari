@@ -72,11 +72,6 @@ CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
 METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept
 {
-    for (auto i : color_id_itrs)
-    {
-        std::cerr << i.first.size() << "\n";
-    }
-
     if (threshold == 0) threshold = 1;
     std::size_t filenames_size = m_filenames.size();
     std::vector<color_t> tmp;
