@@ -296,7 +296,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 ids.push_back((*itr).second);
                 ++itr;
             }
-            auto last = std::unique(ids.begin(), ids.end());
+            auto last = std::unique(ids.begin(), ids.end()); //do we expect any duplicates here?
             ids.erase(last, ids.end());
             sorted_color_lists.push_back(std::make_pair(std::move(ids), current)); // save ([ids], minimizer) to disk
             unique_minimizers.push_back(current);
@@ -310,6 +310,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         dup2(redirect, 1);
         close(redirect);
 
+        //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
         hf.build_in_external_memory(pt_itr, unique_minimizers.size(), get_pthash_options(build_parameters));
 
         fflush(stdout);
@@ -351,6 +352,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         }
         cbuild.build(m_ccs);
         m_map_builder.build(m_map);
+        //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
     }
 
     if (build_parameters.verbose > 0) {
