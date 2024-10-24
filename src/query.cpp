@@ -82,7 +82,10 @@ void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vec
     // Choose the correct function based on the threshold ratio
     query_fn_t query_algo;
     if (opts.threshold_ratio == 1) {
-        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_full_intersection;
+        //query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_full_intersection;
+
+        // TODO : opti full_intersection, for now only union threshold has been optimized so use it for experiments
+        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
     } else {
         query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
     }

@@ -57,13 +57,15 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         }
     }
     
-    if (opts.verbose > 2) {
+    if (opts.verbose > 2) { 
         std::cerr << "step 3: computing intersections\n";
         if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
         else std::cerr << "\tcompute mixed intersection (for a mix of dense and sparse vectors)\n"; 
     }
     if (color_itrs.empty()) return {};
-    if (all_very_dense) return union_dense_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio, contig_kmer_count, opts.verbose); // intersect of dense rows
+    //if (all_very_dense) return union_dense_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio, contig_kmer_count, opts.verbose); // intersect of dense rows
+
+    //TODO : opti dense case aswell, for now only mixed has been optimized so use it for experiments
     return union_mixed_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio, opts.verbose); // intersect dense and sparse rows
 }
 
@@ -139,6 +141,83 @@ std::vector<typename METHOD_HEADER::color_t>
 METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept
 {
     if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
+    
+    std::vector<color_t> colors;
+    std::size_t vec_size = color_id_itrs.size();
+    std::size_t filenames_size = m_filenames.size();
+
+    std::vector<uint32_t> counts(filenames_size, 0);
+
+    for (uint64_t i = 0; i != vec_size; ++i) {
+        while (color_id_itrs[i].first.value() != filenames_size) {
+            counts[color_id_itrs[i].first.value()] += color_id_itrs[i].second;
+            color_id_itrs[i].first.next();
+        }
+    }
+
+    for (uint64_t i = 0; i != filenames_size; ++i) {
+        if (counts[i] >= threshold) colors.push_back(i);
+    }
+
+    return colors;
+} 
+
+
+/* FULGOR's way
+CLASS_HEADER
+std::vector<typename METHOD_HEADER::color_t>  
+METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept
+{
+    if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
+
+    std::sort(
+        color_id_itrs.begin(),
+        color_id_itrs.end(),
+        [](auto const& x, auto const& y) { return x.first.size() < y.first.size(); }
+    );
+    
+    std::vector<color_t> colors;
+    std::size_t vec_size = color_id_itrs.size();
+    std::size_t filenames_size = m_filenames.size();
+    std::size_t score;
+
+    color_t candidate =
+        (*std::min_element(color_id_itrs.begin(), color_id_itrs.end(), [](auto const& x, auto const& y) {
+            return x.first.value() < y.first.value();
+        })).first.value();
+
+    uint64_t nb_candidates = 0;
+
+    while (candidate != filenames_size) {
+        nb_candidates++;
+        uint32_t next_candidate = filenames_size;
+        uint32_t score = 0;
+        for (uint64_t i = 0; i != vec_size; ++i) {
+            if (color_id_itrs[i].first.value() == candidate) {
+                score += color_id_itrs[i].second;
+                color_id_itrs[i].first.next();
+            }
+            // compute next minimum
+            if (color_id_itrs[i].first.value() < next_candidate) {
+                next_candidate = color_id_itrs[i].first.value();
+            }
+        }
+        if (score >= threshold) colors.push_back(candidate);
+        assert(next_candidate > candidate);
+        candidate = next_candidate;
+    }
+
+    return colors;
+} */
+
+
+
+/* V1 : heuristical way 
+CLASS_HEADER
+std::vector<typename METHOD_HEADER::color_t>  
+METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept
+{
+    if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
 
     std::sort(
         color_id_itrs.begin(),
@@ -146,7 +225,7 @@ METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClas
         [](auto const& x, auto const& y) { return x.first.size() < y.first.size(); }
     );
 
-    /*for (auto i : color_id_itrs)
+    //for (auto i : color_id_itrs)
     {
         std::cerr << "next i \n";
         std::cerr << i.first.size() << " size, " << i.second << " nb kmers \n";
@@ -155,7 +234,7 @@ METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClas
             i.first.next();
         }
         i.first.reset();        
-    }*/
+    }
     
 
     bit::vector<uint64_t> tested(m_filenames.size());
@@ -227,7 +306,7 @@ METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClas
     }
     
     return colors;
-}
+} */
 
 
 #undef CLASS_HEADER
