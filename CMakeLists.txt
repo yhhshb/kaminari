@@ -36,6 +36,10 @@ if (UNIX)
   endif()
 endif()
 
+
+# Include FQFeeder
+add_subdirectory(bundled/FQFeeder)
+
 ## fetch latest argparse
 include(FetchContent)
 FetchContent_Declare(
@@ -73,9 +77,11 @@ add_library(biolib_static STATIC
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
 add_dependencies(kaminari biolib_static) # lphash_static
+
 target_link_libraries(kaminari
   biolib_static
   argparse
+  fqfeeder
   z
 )
 

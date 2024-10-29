@@ -13,9 +13,9 @@ options_t check_args(const argparse::ArgumentParser& parser);
 
 int main(const argparse::ArgumentParser& parser) 
 {
-    std::chrono::steady_clock::time_point begin;
-
     auto opts = check_args(parser);
+
+    //load index in mem
     minimizer::index<color_classes::hybrid, pthash::compact_vector> idx;
     {
         std::ifstream in(opts.index_filename, std::ios::binary);
@@ -24,6 +24,7 @@ int main(const argparse::ArgumentParser& parser)
         if (opts.verbose) std::cerr << "Read " << loader.get_byte_size() << " Bytes\n";
     }
 
+    //open output file
     std::streambuf * buf;
     std::ofstream of;
     if(opts.output_filename != "") {
@@ -34,69 +35,125 @@ int main(const argparse::ArgumentParser& parser)
     }
     std::ostream out(buf);
 
-    gzFile fp = nullptr;
-    kseq_t* seq = nullptr;
-    for (auto filename : opts.input_filenames) {
-        begin = std::chrono::steady_clock::now();
 
-        if ((fp = gzopen(filename.c_str(), "r")) == NULL)
-            throw std::runtime_error("Unable to open input file " + filename);
-        seq = kseq_init(fp);
+    std::chrono::steady_clock::time_point begin;
+    begin = std::chrono::steady_clock::now();
 
-
-        if (opts.ranking){
-            ranking_queries(idx, seq, out, opts);
-        }
-        else{
-            classic_queries(idx, seq, out, opts);
-        }
-
-        seq = nullptr;
-        fp = nullptr;
-        
-        std::cerr << "query all seqs in file " << filename << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
+    if (opts.nthreads == 1) {
+        opts.nthreads += 1;
+        std::cerr << "1 thread was specified, but an additional thread will be allocated for parsing\n";
     }
+    
+    //prep parser + threads
+    fastx_parser::FastxParser<fastx_parser::ReadSeq> rparser(opts.input_filenames, opts.nthreads, opts.nthreads - 1);
+
+    rparser.start();
+    std::vector<std::thread> workers;
+    std::mutex ofile_mut;
+
+    if (opts.ranking){
+        if (opts.verbose > 0){
+            std::cerr << "Start queries, ranking=on, threshold=" << opts.threshold_ratio << "\n";
+        } 
+        for (uint64_t i = 1; i != opts.nthreads; ++i) {
+            workers.push_back(
+                std::thread(
+                    [&idx, &rparser, &opts, &out, &ofile_mut]() {
+                        ranking_queries(idx, rparser, opts, out, ofile_mut);
+                    }
+                )
+            );
+        }
+    }
+    else{
+        if (opts.verbose > 0){
+            std::cerr << "Start queries, ranking=off, threshold=" << opts.threshold_ratio << "\n";
+        } 
+        for (uint64_t i = 1; i != opts.nthreads; ++i) {
+            workers.push_back(
+                std::thread(
+                    [&idx, &rparser, &opts, &out, &ofile_mut]() {
+                        classic_queries(idx, rparser, opts, out, ofile_mut);
+                    }
+                )
+            );
+        }
+    }
+    
+    for (auto& w : workers) { w.join(); }
+    rparser.stop();
+
+    std::cerr << "Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
+
     return 0;
 }
 
-void ranking_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, kseq_t* seq, std::ostream& out, options_t& opts){
-    while (kseq_read(seq) >= 0) {
-        auto ids = idx.ranking_query_union_threshold(seq->seq.s, seq->seq.l, opts);
+void ranking_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+    auto rg = rparser.getReadGroup();
+    std::stringstream ss;
+    uint64_t buff_size = 0;
+    constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
+    
+    while (rparser.refill(rg)) {
+        for (auto const& record : rg) {
+            auto ids = idx.ranking_query_union_threshold(record.seq.c_str(), record.seq.size(), opts);
+            std::sort(
+                ids.begin(),
+                ids.end(),
+                [](auto const& x, auto const& y) { return x.score > y.score; }
+            );
+            buff_size += 1;
 
-        std::sort(
-            ids.begin(),
-            ids.end(),
-            [](auto const& x, auto const& y) { return x.score > y.score; }
-        );
+            ss << record.name << "\t" << ids.size();
+            for (auto c : ids) { ss << "\t(" << c.item << "," << c.score << ")"; }
+            ss << "\n";
 
-        out << std::string(seq->name.s, seq->name.l) << "\t" << ids.size();
-        for (auto c : ids) { out << "\t(" << c.item << "," << c.score << ")"; }
-        out << "\n";
+            if (buff_size > buff_thresh) {
+                std::string outs = ss.str();
+                ss.str("");
+                ofile_mut.lock();
+                outstream.write(outs.data(), outs.size());
+                ofile_mut.unlock();
+                buff_size = 0;
+            }
+        }
     }
 }
 
 
-void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, kseq_t* seq, std::ostream& out, options_t& opts){
+void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
     using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, pthash::compact_vector>::*)(const char*, std::size_t, options_t&) const;
 
-    // Choose the correct function based on the threshold ratio
-    query_fn_t query_algo;
+   query_fn_t query_algo;
     if (opts.threshold_ratio == 1) {
-        //query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_full_intersection;
-
-        // TODO : opti full_intersection, for now only union threshold has been optimized so use it for experiments
-        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
+        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_full_intersection;
     } else {
         query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
     }
 
-    // Loop through the sequences
-    while (kseq_read(seq) >= 0) {
-        // Correct way to call a member function pointer using object
-        auto ids = (idx.*query_algo)(seq->seq.s, seq->seq.l, opts);
-        out << std::string(seq->name.s, seq->name.l) << "\t" << ids.size();
-        for (auto c : ids) { out << "\t" << c; }
-        out << "\n";
+   auto rg = rparser.getReadGroup();
+   std::stringstream ss;
+   uint64_t buff_size = 0;
+   constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
+
+   while (rparser.refill(rg)) {
+        for (auto const& record : rg) {
+            auto ids = (idx.*query_algo)(record.seq.c_str(), record.seq.size(), opts);
+            buff_size += 1;
+
+            ss << record.name << "\t" << ids.size();
+            for (auto c : ids) { ss << "\t" << c; }
+            ss << "\n";
+
+            if (buff_size > buff_thresh) {
+                std::string outs = ss.str();
+                ss.str("");
+                ofile_mut.lock();
+                outstream.write(outs.data(), outs.size());
+                ofile_mut.unlock();
+                buff_size = 0;
+            }
+        }
     }
 }
 
@@ -109,7 +166,7 @@ argparse::ArgumentParser get_parser()
         .help("kaminari index to use")
         .required();
     parser.add_argument("-i", "--input-list")
-        .help("list of input files to query")
+        .help("list of fasta files to query, if 1 file ending with \".list\" is provided, it is assumed to be a list of filenames")
         .nargs(argparse::nargs_pattern::at_least_one)
         .required();
     parser.add_argument("-o", "--output-filename")
@@ -175,7 +232,15 @@ options_t check_args(const argparse::ArgumentParser& parser)
     // if (opts.check and opts.nthreads != 1) {
     //     std::cerr << "[Warning] Checking does not support multi-threading\n";
     // }
-    if (opts.input_filenames.size() == 1) opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
+
+    // check if input is a list of filenames or fasta files
+    if (opts.input_filenames.size() == 1 && 
+        opts.input_filenames.at(0).size() >= 5 &&
+        opts.input_filenames.at(0).substr(opts.input_filenames.at(0).size() - 5) == ".list") 
+    {
+        opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
+    }
+
     return opts;
 }
 

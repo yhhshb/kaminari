@@ -43,16 +43,9 @@ class index
 
         std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, options_t& opts) const noexcept;
 
-        std::vector<color_t> query_full_intersection(const std::string& q, options_t& opts = 0) const noexcept {return query_full_intersection(q.c_str(), q.length(), opts);}
-
-
         std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
 
-        std::vector<color_t> query_union_threshold(const std::string& q, options_t& opts = 0) const noexcept {return query_union_threshold(q.c_str(), q.length(), opts);}
-
         std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
-
-        std::vector<scored_id> ranking_query_union_threshold(const std::string& q, options_t& opts) const noexcept {return ranking_query_union_threshold(q.c_str(), q.length(), opts);}
         
         void memory_breakdown(std::ostream& out) const noexcept;
         
@@ -78,14 +71,14 @@ class index
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
         
-        std::vector<color_t> full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept;
-        std::vector<color_t> full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept;
+        std::vector<color_t> full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
+        std::vector<color_t> full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
 
-        std::vector<color_t> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept;
-        std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
+        std::vector<scored_id> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers) const noexcept;
+        std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
 
-        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers, std::size_t verbosity_level) const noexcept;
-        std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, std::size_t verbosity_level) const noexcept;
+        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers) const noexcept;
+        std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         
         std::vector<std::string> m_filenames;
         uint8_t k;
@@ -343,7 +336,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 if (build_parameters.check) { //super super slow but how to access in builder ?
                     pthash::compact_vector check_m_map;
                     m_map_builder.build(check_m_map);
-                    if (check_m_map[mp_idx] != (1 << m_map_builder.width()) - 1) throw std::runtime_error("[check fail] reassigning id of unique minimizer (the minimizer is not unique)");
+                    if (check_m_map[mp_idx] != static_cast<uint64_t>((1 << m_map_builder.width()) - 1)) throw std::runtime_error("[check fail] reassigning id of unique minimizer (the minimizer is not unique)");
                 }
                 m_map_builder.set(mp_idx, cid);
                 ++itr;

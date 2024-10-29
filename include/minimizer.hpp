@@ -66,7 +66,8 @@ uint64_t from_string(
         accumulator.push_back({added.itself, added.id, added.p1, added.size});
     };
 
-    auto bit_to_nuc = [](uint64_t bits, uint32_t len) {
+    [[maybe_unused]] auto bit_to_nuc = [](uint64_t bits, uint32_t len) {
+        //used for debugging
         std::string nuc;
         for (uint32_t i = 0; i < len; ++i) {
             uint8_t b = (bits >> (2 * (len - i - 1))) & 3;

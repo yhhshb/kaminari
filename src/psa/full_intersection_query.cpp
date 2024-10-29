@@ -13,7 +13,7 @@ CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
 METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l, options_t& opts) const noexcept
 {
-    if (opts.verbose > 0) std::cerr << "step 1: collect color class ids\n";
+    if (opts.verbose > 2) std::cerr << "step 1: collect color class ids\n";
     std::vector<std::size_t> ccids;
     { // collect color class ids
         std::size_t contig_mmer_count;
@@ -24,119 +24,74 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         }
     }
 
-    if (opts.verbose > 0) std::cerr << "step 2: ids to colors\n";
+    if (opts.verbose > 2) std::cerr << "step 2: ids to colors\n";
     std::vector<typename ColorClasses::row_accessor> color_itrs;
     bool all_very_dense = true;
     {
         auto last = std::unique(ccids.begin(), ccids.end()); // deduplicate color class ids
         for (auto itr = ccids.begin(); itr != last; ++itr) { 
             color_itrs.push_back(m_ccs.colors_at(*itr));
-
-            // IMPROVEMENT 
-            // Divide rows based on dense/sparse 
-            // 1) apply dense_intersection to the dense dataset 
-            // 2) and the complementary iterators from the sparse set <-- Not sure about this
-            // make the complementary of the result of (2) and make another intersection for the final result
             if (color_itrs.back().type() != ColorClasses::row_accessor::complementary_delta_gaps) {
                 all_very_dense = false;
             }
         }
     }
-    if (opts.verbose > 0) {
+    if (opts.verbose > 2) {
         std::cerr << "step 3: computing intersections\n";
         if (all_very_dense) std::cerr << "\tcompute dense intersection\n";
         else std::cerr << "\tcompute mixed intersection (dense and sparse vectors)\n"; 
     }
     if (color_itrs.empty()) return {};
-    if (all_very_dense) return full_dense_intersection(std::move(color_itrs), opts.verbose); // intersect of dense rows
-    else return full_mixed_intersection(std::move(color_itrs), opts.verbose); // intersect dense and sparse rows
+    if (all_very_dense) return full_dense_intersection(std::move(color_itrs)); // intersect of dense rows
+    else return full_mixed_intersection(std::move(color_itrs)); // intersect dense and sparse rows
 }
 
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept
+METHOD_HEADER::full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept
 {
-    std::vector<color_t> tmp;
-    { // step 1: take the union of complementary sets
-        for (auto& itr : color_id_itrs) itr.reinit_for_complemented_set_iteration();
-        color_t candidate = (
-            *std::min_element(
-                color_id_itrs.begin(), 
-                color_id_itrs.end(),
-                [](auto const& x, auto const& y) {
-                    return x.comp_value() < y.comp_value();
-                }
-            )
-        ).comp_value();
-        // const uint32_t num_docs = iterators[0].num_docs();
-
-        tmp.reserve(m_filenames.size());
-        while (candidate < m_filenames.size()) {
-            color_t next_candidate = m_filenames.size();
-            for (uint64_t i = 0; i != color_id_itrs.size(); ++i) {
-                if (color_id_itrs.at(i).comp_value() == candidate) color_id_itrs[i].comp_next();
-                /* compute next minimum */
-                if (color_id_itrs.at(i).comp_value() < next_candidate) {
-                    next_candidate = color_id_itrs.at(i).comp_value();
-                }
-            }
-            tmp.push_back(candidate);
-            assert(next_candidate > candidate);
-            candidate = next_candidate;
-        }
-    }
     std::vector<color_t> colors;
-    { // step 2: compute the intersection by scanning tmp
-        color_t candidate = 0;
-        for (std::size_t i = 0; i != tmp.size(); ++i) {
-            while (candidate < tmp[i]) {
-                colors.push_back(candidate);
-                candidate += 1;
-            }
-            candidate += 1;  // skip the candidate because it is equal to tmp[i]
-        }
-        while (candidate < m_filenames.size()) {
-            colors.push_back(candidate);
-            candidate += 1;
+    std::size_t vec_size = color_id_itrs.size();
+    std::size_t filenames_size = m_filenames.size();
+
+    std::vector<bool> presence(filenames_size, true);
+
+    for (uint64_t i = 0; i != vec_size; ++i) {
+        while (color_id_itrs[i].comp_value() != filenames_size) {
+            presence[color_id_itrs[i].comp_value()] = false;
+            color_id_itrs[i].comp_next();
         }
     }
+
+    for (uint32_t i = 0; i != filenames_size; ++i) {
+        if (presence[i]) colors.push_back(i);
+    }
+
     return colors;
 }
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs, std::size_t verbosity_level) const noexcept
+METHOD_HEADER::full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept
 {
-    std::sort(
-        color_id_itrs.begin(),
-        color_id_itrs.end(),
-        [](auto const& x, auto const& y) { return x.size() < y.size(); }
-    );
-
     std::vector<color_t> colors;
-    {
-        // const uint32_t num_docs = iterators[0].num_docs();
-        color_t candidate = color_id_itrs.front().value();
-        std::size_t i = 1;
-        while (candidate < m_filenames.size()) {
-            for (; i != color_id_itrs.size(); ++i) {
-                color_id_itrs[i].next_geq(candidate);
-                color_t val = color_id_itrs.at(i).value();
-                if (val != candidate) {
-                    candidate = val;
-                    i = 0;
-                    break;
-                }
-            }
-            if (i == color_id_itrs.size()) {
-                colors.push_back(candidate);
-                color_id_itrs[0].next();
-                candidate = color_id_itrs.at(0).value();
-                i = 1;
-            }
+    std::size_t vec_size = color_id_itrs.size();
+    std::size_t filenames_size = m_filenames.size();
+
+    std::vector<uint32_t> counts(filenames_size, 0);
+
+    for (uint64_t i = 0; i != vec_size; ++i) {
+        while (color_id_itrs[i].value() != filenames_size) {
+            counts[color_id_itrs[i].value()] += 1;
+            color_id_itrs[i].next();
         }
     }
+
+    for (uint32_t i = 0; i != filenames_size; ++i) {
+        if (counts[i] == vec_size) colors.push_back(i);
+    }
+
     return colors;
 }
 
