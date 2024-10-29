@@ -86,7 +86,7 @@ METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClas
     std::vector<uint32_t> counts(filenames_size, nb_kmers);
 
     for (uint64_t i = 0; i != vec_size; ++i) {
-        while (color_id_itrs[i].first.comp_value() != filenames_size) {
+        while (color_id_itrs[i].first.comp_value() < filenames_size) { //"<" and not "!=" because in case of color having every docid, comp_val stays -1, in an unsigned int so 2^32-1
             counts[color_id_itrs[i].first.comp_value()] -= color_id_itrs[i].second;
             color_id_itrs[i].first.comp_next();
         }

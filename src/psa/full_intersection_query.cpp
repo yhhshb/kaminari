@@ -58,7 +58,7 @@ METHOD_HEADER::full_dense_intersection(std::vector<typename ColorClasses::row_ac
     std::vector<bool> presence(filenames_size, true);
 
     for (uint64_t i = 0; i != vec_size; ++i) {
-        while (color_id_itrs[i].comp_value() != filenames_size) {
+        while (color_id_itrs[i].comp_value() < filenames_size) {
             presence[color_id_itrs[i].comp_value()] = false;
             color_id_itrs[i].comp_next();
         }

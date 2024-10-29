@@ -116,7 +116,7 @@ METHOD_HEADER::ranking_dense_intersection(std::vector<std::pair<typename ColorCl
     
 
     for (uint64_t i = 0; i != vec_size; ++i) {
-        while (color_id_itrs[i].first.comp_value() != filenames_size) {
+        while (color_id_itrs[i].first.comp_value() < filenames_size) {
             counts[color_id_itrs[i].first.comp_value()] -= color_id_itrs[i].second;
             color_id_itrs[i].first.comp_next();
         }
