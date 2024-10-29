@@ -118,6 +118,15 @@ void ranking_queries(minimizer::index<color_classes::hybrid, pthash::compact_vec
             }
         }
     }
+    // dump anything left in the buffer
+    if (buff_size > 0) {
+        std::string outs = ss.str();
+        ss.str("");
+        ofile_mut.lock();
+        outstream.write(outs.data(), outs.size());
+        ofile_mut.unlock();
+        buff_size = 0;
+    }
 }
 
 
@@ -154,6 +163,15 @@ void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vec
                 buff_size = 0;
             }
         }
+    }
+    // dump anything left in the buffer
+    if (buff_size > 0) {
+        std::string outs = ss.str();
+        ss.str("");
+        ofile_mut.lock();
+        outstream.write(outs.data(), outs.size());
+        ofile_mut.unlock();
+        buff_size = 0;
     }
 }
 
