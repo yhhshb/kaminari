@@ -16,18 +16,6 @@ Colors are still pre-computed [GGCAT](https://github.com/algbio/GGCAT).
 Dependencies
 ------------
 
-#### GGCAT
-
-The code uses the [GGCAT](https://github.com/algbio/GGCAT) Rust library,
-so make sure you have Rust installed. 
-If not, Rust can be installed as recommended [here](https://www.rust-lang.org/tools/install), with
-
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-Then, switch to the [Nightly](https://doc.rust-lang.org/book/appendix-07-nightly-rust.html#rustup-and-the-role-of-rust-nightly) release channel.
-
-	rustup toolchain install nightly
-
 #### zlib
 
 If you do not have `zlib` installed, you can do
