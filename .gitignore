@@ -1,6 +1,6 @@
 .DS_Store
 .vscode
-build
+build*
 debug_build
 mphfs
 tmp

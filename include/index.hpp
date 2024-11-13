@@ -55,7 +55,7 @@ class index
 
     private:
         typedef pthash::build_configuration pthash_opt_t;
-        typedef pthash::single_phf<pthash::murmurhash2_64, pthash::dictionary_dictionary, true> pthash_minimizers_mphf_t;
+        typedef pthash::dense_partitioned_phf<pthash::murmurhash2_64, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
 
         template <class Iterator>
         class pthash_input_iterator {
@@ -154,14 +154,20 @@ typename METHOD_HEADER::pthash_opt_t
 METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
 {
     pthash_opt_t opts;
-    opts.c = build_parameters.pthash_constant;
     opts.seed = build_parameters.seed;
+    opts.lambda = 4; //build_parameters.pthash_constant; (too slow = try decreasing), higher lambda : more space efficient 
+    opts.alpha = 0.97; //was 0.94
+    opts.search = pthash::pthash_search_type::add_displacement;
+    opts.avg_partition_size = 3000;
+    opts.minimal_output = true;
+    opts.verbose_output = build_parameters.verbose;
+    
     opts.ram = build_parameters.max_ram * constants::GB;
     opts.num_threads = build_parameters.nthreads;
     opts.tmp_dir = build_parameters.tmp_dir;
-    opts.verbose_output = build_parameters.verbose;
-    opts.minimal_output = true;
-    opts.alpha = 0.94;
+
+    opts.dense_partitioning = true;
+
     return opts;
 }
 
@@ -280,11 +286,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     );
     { // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
         if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
-        emem::external_memory_vector<minimizer_t, false> unique_minimizers(
+        /*emem::external_memory_vector<minimizer_t, false> unique_minimizers(
             build_parameters.max_ram * constants::GB, 
             build_parameters.tmp_dir, 
             utils::get_tmp_filename("", "unique_minimizers", run_id)
-        );
+        );*/
+        std::vector<minimizer_t> unique_minimizers; //TODO pthash phobic dense_partitonned needs random access to the keys for parallelism. emem random access ? for now vector but might overflow RAM (347M minimisers for 60human docs -> 1.39GB RAM)
         
         auto itr = tmp_sorted_storage.cbegin();
         while (itr != tmp_sorted_storage.cend()) { // build list of colors for each minimizer
@@ -300,7 +307,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             unique_minimizers.push_back(current);
         }
         if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
-        auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
+        //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
         int backup, redirect;
         fflush(stdout);
         backup = dup(1);
@@ -309,7 +316,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         close(redirect);
 
         //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
-        hf.build_in_external_memory(pt_itr, unique_minimizers.size(), get_pthash_options(build_parameters));
+        hf.build_in_internal_memory(unique_minimizers.begin(), unique_minimizers.size(), get_pthash_options(build_parameters));
 
         fflush(stdout);
         dup2(backup, 1);

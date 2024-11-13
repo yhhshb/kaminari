@@ -77,11 +77,15 @@ add_library(biolib_static STATIC
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
 
+# Add pthash as a subdirectory
+add_subdirectory(bundled/pthash)
+
 # pthash includes
 target_include_directories(kaminari PRIVATE
     ${PROJECT_SOURCE_DIR}/bundled/pthash
     ${PROJECT_SOURCE_DIR}/bundled/pthash/include
     ${PROJECT_SOURCE_DIR}/bundled/pthash/external/essentials/include
+    ${PROJECT_SOURCE_DIR}/bundled/pthash/external/xxHash
 )
 
 add_dependencies(kaminari biolib_static) # lphash_static
@@ -90,6 +94,7 @@ target_link_libraries(kaminari
   biolib_static
   argparse
   fqfeeder
+  PTHASH
   z
 )
 
