@@ -41,6 +41,7 @@ class index
         index();
         index(const build::options_t& build_parameters);
 
+        //following methods are explicitly instantiated in src/psa/
         std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, options_t& opts) const noexcept;
 
         std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
@@ -55,8 +56,6 @@ class index
     private:
         typedef pthash::build_configuration pthash_opt_t;
         typedef pthash::single_phf<pthash::murmurhash2_64, pthash::dictionary_dictionary, true> pthash_minimizers_mphf_t;
-        typedef std::pair<minimizer_t, color_t> mpc_t;
-        typedef emem::external_memory_vector<mpc_t> mmc_vector_t;
 
         template <class Iterator>
         class pthash_input_iterator {
@@ -71,6 +70,8 @@ class index
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
         
+        //following methods are explicitly instantiated in src/psa/files
+        //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
         std::vector<color_t> full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
         std::vector<color_t> full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
 
@@ -170,12 +171,16 @@ void
 METHOD_HEADER::build(const build::options_t& build_parameters)
 {
     std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    mmc_vector_t tmp_sorted_storage(
+
+    typedef std::pair<minimizer_t, color_t> mpc_t;
+    emem::external_memory_vector<mpc_t> tmp_sorted_storage(
         build_parameters.max_ram * constants::GB, 
         build_parameters.tmp_dir, 
         utils::get_tmp_filename("", "minimizer_unitig_id", run_id)
     );
+
     std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
+
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
         float fraction = 0.1;
@@ -289,7 +294,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 ids.push_back((*itr).second);
                 ++itr;
             }
-            auto last = std::unique(ids.begin(), ids.end()); //do we expect any duplicates here?
+            auto last = std::unique(ids.begin(), ids.end()); //do we expect any duplicates here? -> no because we already deduplicated the minimizers for each file, TODO: choice between deduplicating minimisers in one file here or before
             ids.erase(last, ids.end());
             sorted_color_lists.push_back(std::make_pair(std::move(ids), current)); // save ([ids], minimizer) to disk
             unique_minimizers.push_back(current);
