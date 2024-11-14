@@ -155,7 +155,7 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
 {
     pthash_opt_t opts;
     opts.seed = build_parameters.seed;
-    opts.lambda = 4; //build_parameters.pthash_constant; (too slow = try decreasing), higher lambda : more space efficient 
+    opts.lambda = build_parameters.pthash_constant; // (too slow = try decreasing), higher lambda : more space efficient 
     opts.alpha = 0.97; //was 0.94
     opts.search = pthash::pthash_search_type::add_displacement;
     opts.avg_partition_size = 3000;
@@ -187,6 +187,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
 
+    //STEP 1 : READING FILES ===================================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
         float fraction = 0.1;
@@ -284,7 +285,9 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         build_parameters.tmp_dir, 
         utils::get_tmp_filename("", "color_minimizer_list", run_id)
     );
-    { // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
+    //STEP 2 : AGGREGATING COLORS ==============================================
+    { 
+        // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
         if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
         /*emem::external_memory_vector<minimizer_t, false> unique_minimizers(
             build_parameters.max_ram * constants::GB, 
@@ -306,6 +309,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             sorted_color_lists.push_back(std::make_pair(std::move(ids), current)); // save ([ids], minimizer) to disk
             unique_minimizers.push_back(current);
         }
+
+    //STEP 3 : BUILDING MPHF ===================================================
         if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
         //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
         int backup, redirect;
@@ -323,7 +328,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         close(backup);
         assert(hf.num_keys() == unique_minimizers.size());
     }
-
+    //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
@@ -365,7 +370,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     }
 
-    /* commented because use query union threshold with scored_id so doesnt compile 
     if (build_parameters.check) {
         color_t id = 0;
         gzFile fp = nullptr;
@@ -423,7 +427,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         }
         std::cerr << "[check PASS] Everything is ok\n";
     }
-    */
+    
 }
 
 #undef CLASS_HEADER

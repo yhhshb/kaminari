@@ -65,9 +65,9 @@ argparse::ArgumentParser get_parser()
         .scan<'d', uint64_t>()
         .default_value(uint64_t(42));
     parser.add_argument("-c", "--pthash-constant")
-        .help("PTHash build constant")
+        .help("PTHash build constant, higher = slower but more space efficient")
         .scan<'f', double>()
-        .default_value(double(3));
+        .default_value(double(4));
     parser.add_argument("-a", "--canonical")
         .help("canonical minimizers")
         .default_value(false)
