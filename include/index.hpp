@@ -190,6 +190,10 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     //STEP 1 : READING FILES ===================================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
+
+        std::cerr << "DEBUG Start reading files\n";
+        utils::printRAMInfo();
+
         float fraction = 0.1;
         color_t id = 0;
         std::size_t total_kmers = 0;
@@ -272,6 +276,11 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 }
             }
         }
+
+        std::cerr << "DEBUG End reading files\n";
+        std::cerr << "size of emem1 : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
+        utils::printRAMInfo();
+
         if (build_parameters.verbose > 0) {
             std::cerr << "\ttotal k-mers: " << total_kmers << "\n";
             std::cerr << "\ttotal m-mers: " << total_mmers << "\n";
@@ -285,6 +294,11 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         build_parameters.tmp_dir, 
         utils::get_tmp_filename("", "color_minimizer_list", run_id)
     );
+
+    std::cerr << "DEBUG in-between step and 2, defined(and reserved buffer) emem2\n";
+    utils::printRAMInfo();
+
+
     //STEP 2 : AGGREGATING COLORS ==============================================
     { 
         // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
@@ -310,6 +324,13 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             unique_minimizers.push_back(current);
         }
 
+        std::cerr << "DEBUG End aggregating colors\n";
+        std::cerr << "size of emem1 (should be deleted now) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
+        std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
+        std::cerr << "size of unique_minmers : " << unique_minimizers.size()*sizeof(minimizer_t) << "\n";
+        utils::printRAMInfo();
+
+
     //STEP 3 : BUILDING MPHF ===================================================
         if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
         //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
@@ -327,7 +348,21 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         dup2(backup, 1);
         close(backup);
         assert(hf.num_keys() == unique_minimizers.size());
+
+        std::cerr << "DEBUG End building MPHF\n";
+        std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
+        std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
+        std::cerr << "size of unique_minmers : " << unique_minimizers.size()*sizeof(minimizer_t) << "\n";
+        std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+        utils::printRAMInfo();
     }
+
+    std::cerr << "DEBUG in-between step 3 and 4\n";
+    std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
+    std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
+    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+    utils::printRAMInfo();
+
     //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
@@ -365,11 +400,18 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
     }
 
+    std::cerr << "DEBUG end mapping\n";
+    std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
+    std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
+    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+    std::cerr << "check mem breakdown for thr rest \n";
+    utils::printRAMInfo();
+
     if (build_parameters.verbose > 0) {
         std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     }
-
+    /*
     if (build_parameters.check) {
         color_t id = 0;
         gzFile fp = nullptr;
@@ -386,7 +428,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                         if (::constants::seq_nt4_table[static_cast<uint8_t>(*(seq->seq.s + i + j))] >= 4) valid_kmer = false; 
                     }
                     if (valid_kmer) {
-                        auto color = query_union_threshold(&seq->seq.s[i], build_parameters.k, 0);
+                        auto color = query_union_threshold(&seq->seq.s[i], &seq->seq.s[i].size(), build_parameters);
                         assert(color.size());
                         std::size_t dummy;
                         [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
@@ -427,6 +469,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         }
         std::cerr << "[check PASS] Everything is ok\n";
     }
+    */
     
 }
 
