@@ -15,7 +15,6 @@ options_t check_args(const argparse::ArgumentParser& parser);
 
 int main(const argparse::ArgumentParser& parser) 
 {
-    std::cerr << "--- BUILD BRANCH ---\n";
     auto opts = check_args(parser);
     minimizer::index<color_classes::hybrid, pthash::compact_vector> idx(opts);
     if (opts.verbose) {
