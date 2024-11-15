@@ -12,6 +12,8 @@
 #include "../bundled/biolib/include/bit_vector.hpp"
 #include "../bundled/biolib/include/elias_fano.hpp"
 
+#include <chrono>
+
 namespace kaminari {
 namespace minimizer {
 
@@ -187,6 +189,9 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
 
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     //STEP 1 : READING FILES ===================================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
@@ -277,6 +282,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             }
         }
 
+        std::cout << "DEBUG Time for reading files: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
         std::cerr << "DEBUG End reading files\n";
         std::cerr << "size of emem1 : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
         utils::printRAMInfo();
@@ -303,6 +314,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     { 
         // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
         if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
+        start_time = std::chrono::high_resolution_clock::now();
         /*emem::external_memory_vector<minimizer_t, false> unique_minimizers(
             build_parameters.max_ram * constants::GB, 
             build_parameters.tmp_dir, 
@@ -324,6 +336,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             unique_minimizers.push_back(current);
         }
 
+        std::cout << "DEBUG Time for aggregating colors: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
         std::cerr << "DEBUG End aggregating colors\n";
         std::cerr << "size of emem1 (should be deleted now) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
         std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
@@ -333,6 +351,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     //STEP 3 : BUILDING MPHF ===================================================
         if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
+        start_time = std::chrono::high_resolution_clock::now();
         //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
         int backup, redirect;
         fflush(stdout);
@@ -348,6 +367,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         dup2(backup, 1);
         close(backup);
         assert(hf.num_keys() == unique_minimizers.size());
+
+        std::cout << "DEBUG Time for MPHF build: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
 
         std::cerr << "DEBUG End building MPHF\n";
         std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
@@ -366,6 +391,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
         pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
 
@@ -399,6 +426,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         m_map_builder.build(m_map);
         //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
     }
+
+    std::cout << "DEBUG Time for dedup + mapping: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
 
     std::cerr << "DEBUG end mapping\n";
     std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
