@@ -36,10 +36,6 @@ if (UNIX)
   endif()
 endif()
 
-
-# Include FQFeeder
-add_subdirectory(bundled/FQFeeder)
-
 ## fetch latest argparse
 include(FetchContent)
 FetchContent_Declare(
@@ -77,6 +73,12 @@ add_library(biolib_static STATIC
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
 
+# Include FQFeeder
+add_subdirectory(bundled/FQFeeder)
+
+# Include FQFeeder
+add_subdirectory(bundled/unordered_dense)
+
 # Add pthash as a subdirectory
 add_subdirectory(bundled/pthash)
 
@@ -95,6 +97,7 @@ target_link_libraries(kaminari
   argparse
   fqfeeder
   PTHASH
+  unordered_dense
   z
 )
 

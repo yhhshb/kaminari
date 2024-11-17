@@ -11,6 +11,7 @@
 #include "../bundled/biolib/bundled/prettyprint.hpp"
 #include "../bundled/biolib/include/bit_vector.hpp"
 #include "../bundled/biolib/include/elias_fano.hpp"
+#include "../bundled/unordered_dense/include/ankerl/unordered_dense.h"
 
 #include <chrono>
 
@@ -71,6 +72,7 @@ class index
 
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
+        void build2(const build::options_t& build_parameters);
         
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -444,6 +446,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     }
+
     /*
     if (build_parameters.check) {
         color_t id = 0;
@@ -503,6 +506,265 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         std::cerr << "[check PASS] Everything is ok\n";
     }
     */
+    
+}
+
+// Custom hash function for vector<uint32_t>
+struct VectorHash {
+    std::size_t operator()(std::vector<uint32_t> const& vec) const {
+        std::size_t seed = vec.size();
+        for(auto x : vec) {
+            x = ((x >> 16) ^ x) * 0x45d9f3b;
+            x = ((x >> 16) ^ x) * 0x45d9f3b;
+            x = (x >> 16) ^ x;
+            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
+
+CLASS_HEADER
+void
+METHOD_HEADER::build2(const build::options_t& build_parameters)
+{
+    std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+
+
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors;
+    ankerl::unordered_dense::set<uint64_t> unique_minmers;
+
+    std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
+
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    //STEP 1 : READING FILES ===================================================
+    {
+        if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
+
+        std::cerr << "DEBUG Start reading files\n";
+        utils::printRAMInfo();
+
+        float fraction = 0.1;
+        color_t id = 0;
+        std::size_t total_kmers = 0;
+        std::size_t total_mmers = 0;
+        std::size_t total_minimizers = 0;
+        gzFile fp = nullptr;
+        kseq_t* seq = nullptr;
+        std::vector<::minimizer::record_t> mms_buffer;
+        for (auto filename : m_filenames) {
+            if ((fp = gzopen(filename.c_str(), "r")) == NULL)
+                throw std::runtime_error("Unable to open input file " + filename);
+            seq = kseq_init(fp);
+            while (kseq_read(seq) >= 0) {
+                std::size_t contig_mmer_count;
+                auto contig_kmer_count = ::minimizer::from_string<hash64>(
+                    seq->seq.s, 
+                    seq->seq.l, 
+                    build_parameters.k, 
+                    build_parameters.m, 
+                    build_parameters.seed, 
+                    build_parameters.canonical,
+                    contig_mmer_count,
+                    mms_buffer
+                );
+                total_kmers += contig_kmer_count;
+                total_mmers += contig_mmer_count;
+                total_minimizers += mms_buffer.size();
+                if (build_parameters.verbose > 4) {
+                    std::cerr << "\tRead contig:\n" 
+                              << "\t\t" << contig_kmer_count << " k-mers\n"
+                              << "\t\t" << contig_mmer_count << " m-mers\n"
+                              << "\t\t" << mms_buffer.size() << " minimizers\n";
+                }
+                // remove duplicates and output to tmp file on disk
+                std::vector<minimizer_t> minimizers;
+                for (auto r : mms_buffer) {
+                    minimizers.push_back(r.itself);
+                }
+                std::sort(minimizers.begin(), minimizers.end());
+                auto last = std::unique(minimizers.begin(), minimizers.end());
+                for (auto itr = minimizers.begin(); itr != last; ++itr) {
+                    minmer_to_colors[*itr].push_back(id);
+                    unique_minmers.insert(*itr);
+                }
+                mms_buffer.clear();
+
+                if (build_parameters.check) {
+                    std::vector<::minimizer::record_t> kmer_buffer;
+                    std::size_t dummy;
+                    [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
+                        seq->seq.s,
+                        seq->seq.l,
+                        build_parameters.k,
+                        build_parameters.k,
+                        static_cast<uint64_t>(0),
+                        false, // minimizers are canonical or not, kmers are kept as they are for checking
+                        dummy,
+                        kmer_buffer
+                    );
+                    // auto last = std::unique(kmer_buffer.begin(), kmer_buffer.end());
+                    for (auto itr = kmer_buffer.begin(); itr != kmer_buffer.end(); ++itr) {
+                        if (kmer_color_check.find(itr->itself) == kmer_color_check.end()) {
+                            kmer_color_check.emplace(itr->itself, std::vector<color_t> {id});
+                        } else if (kmer_color_check[itr->itself].back() != id) { // this takes care of duplicates
+                            kmer_color_check[itr->itself].push_back(id);
+                        }
+                    }
+                }
+            }
+            if (seq) kseq_destroy(seq);
+            gzclose(fp);
+            fp = nullptr;
+            seq = nullptr;
+            ++id;
+            /* if (build_parameters.verbose > 1) {
+                if (id >= m_filenames.size() * fraction) {
+                    std::cerr << "\tProcessed " << fraction * 100 << "\% of input files\n";
+                    std::cerr << "\t\t(minimizer, color) pairs: " << tmp_sorted_storage.size() << "\n";
+                    fraction += 0.1;
+                }
+            } */
+        }
+
+        std::cout << "DEBUG Time for reading files: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+        std::cerr << "DEBUG End reading files\n";
+        utils::printRAMInfo();
+
+        if (build_parameters.verbose > 0) {
+            std::cerr << "\ttotal k-mers: " << total_kmers << "\n";
+            std::cerr << "\ttotal m-mers: " << total_mmers << "\n";
+            std::cerr << "\ttotal minimizers (with repetitions): " << total_minimizers << "\n";
+        }
+    }
+
+
+    std::cerr << "DEBUG in-between step and 2, defined(and reserved buffer) emem2\n";
+    utils::printRAMInfo();
+
+
+    //STEP 2 : AGGREGATING COLORS ==============================================
+    { 
+        // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
+        if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        /*emem::external_memory_vector<minimizer_t, false> unique_minimizers(
+            build_parameters.max_ram * constants::GB, 
+            build_parameters.tmp_dir, 
+            utils::get_tmp_filename("", "unique_minimizers", run_id)
+        );*/
+
+        std::cout << "DEBUG Time for aggregating colors: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+        std::cerr << "DEBUG End aggregating colors\n";
+        utils::printRAMInfo();
+
+        std::vector<uint64_t> unique_minimizers;
+        for (uint64_t minmer : unique_minmers) {
+            unique_minimizers.push_back(minmer);
+        }
+        unique_minmers.clear();
+
+
+    //STEP 3 : BUILDING MPHF ===================================================
+        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
+        int backup, redirect;
+        fflush(stdout);
+        backup = dup(1);
+        redirect = open("/dev/null", O_WRONLY);
+        dup2(redirect, 1);
+        close(redirect);
+
+        //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
+        hf.build_in_internal_memory(unique_minimizers.begin(), unique_minimizers.size(), get_pthash_options(build_parameters));
+
+        fflush(stdout);
+        dup2(backup, 1);
+        close(backup);
+        assert(hf.num_keys() == unique_minimizers.size());
+
+        std::cout << "DEBUG Time for MPHF build: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+        std::cerr << "DEBUG End building MPHF\n";
+        std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+        utils::printRAMInfo();
+    }
+
+    std::cerr << "DEBUG in-between step 3 and 4\n";
+    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+    utils::printRAMInfo();
+
+    //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
+    {
+        if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        
+        typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
+        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
+
+        if (build_parameters.check) {
+            if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
+            for (std::size_t i = 0; i < hf.num_keys(); ++i) 
+                m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
+        }
+
+        std::unordered_map<std::vector<uint32_t>, uint32_t, VectorHash> color_to_cid;        
+        uint32_t cid = 0;
+
+        for (const auto& pair : minmer_to_colors) {
+            const auto& minmer = pair.first;
+            const auto& colors = pair.second;
+
+            // Check if this vector already has a cid
+            if (color_to_cid.find(colors) == color_to_cid.end()) {
+                // Assign a new cid
+                color_to_cid[colors] = cid++;
+                cbuild.add_color_set(colors.data(), colors.size());
+            }
+
+            
+            // Map minmer to the cid
+            m_map_builder.set(hf(minmer), cid);
+        }
+
+        
+        cbuild.build(m_ccs);
+        m_map_builder.build(m_map);
+        //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
+    }
+
+    std::cout << "DEBUG Time for dedup + mapping: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+    std::cerr << "DEBUG end mapping\n";
+    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+    std::cerr << "check mem breakdown for thr rest \n";
+    utils::printRAMInfo();
+
+    if (build_parameters.verbose > 0) {
+        std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
+        std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
+    }
+
     
 }
 

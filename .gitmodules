@@ -9,3 +9,6 @@
 [submodule "bundled/FQFeeder"]
 	path = bundled/FQFeeder
 	url = https://github.com/rob-p/FQFeeder
+[submodule "bundled/unordered_dense"]
+	path = bundled/unordered_dense
+	url = https://github.com/martinus/unordered_dense.git
