@@ -116,7 +116,7 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
 {
-    build(build_parameters);
+    build2(build_parameters);
 }
 
 CLASS_HEADER
