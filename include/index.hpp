@@ -538,11 +538,11 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    //STEP 1 : READING FILES ===================================================
+    //STEP 1 and 2 : READING FILES ===================================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
 
-        std::cerr << "DEBUG Start reading files\n";
+        std::cerr << "DEBUG Start reading files and aggregating\n";
         utils::printRAMInfo();
 
         float fraction = 0.1;
@@ -586,7 +586,10 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
                 std::sort(minimizers.begin(), minimizers.end());
                 auto last = std::unique(minimizers.begin(), minimizers.end());
                 for (auto itr = minimizers.begin(); itr != last; ++itr) {
-                    minmer_to_colors[*itr].push_back(id);
+                    //avoid duplicates inside a file
+                    if (minmer_to_colors[*itr].empty() || minmer_to_colors[*itr].back() != id){
+                        minmer_to_colors[*itr].push_back(id);
+                    }
                     unique_minmers.insert(*itr);
                 }
                 mms_buffer.clear();
@@ -634,7 +637,7 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
                  ).count() 
               << " milliseconds\n";
 
-        std::cerr << "DEBUG End reading files\n";
+        std::cerr << "DEBUG End reading files + merging\n";
         utils::printRAMInfo();
 
         if (build_parameters.verbose > 0) {
@@ -644,40 +647,9 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
         }
     }
 
-
-    std::cerr << "DEBUG in-between step and 2, defined(and reserved buffer) emem2\n";
-    utils::printRAMInfo();
-
-
-    //STEP 2 : AGGREGATING COLORS ==============================================
-    { 
-        // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
-        if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
-        start_time = std::chrono::high_resolution_clock::now();
-        /*emem::external_memory_vector<minimizer_t, false> unique_minimizers(
-            build_parameters.max_ram * constants::GB, 
-            build_parameters.tmp_dir, 
-            utils::get_tmp_filename("", "unique_minimizers", run_id)
-        );*/
-
-        std::cout << "DEBUG Time for aggregating colors: " 
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - start_time
-                 ).count() 
-              << " milliseconds\n";
-
-        std::cerr << "DEBUG End aggregating colors\n";
-        utils::printRAMInfo();
-
-        std::vector<uint64_t> unique_minimizers;
-        for (uint64_t minmer : unique_minmers) {
-            unique_minimizers.push_back(minmer);
-        }
-        unique_minmers.clear();
-
-
+    {
     //STEP 3 : BUILDING MPHF ===================================================
-        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
+        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
         start_time = std::chrono::high_resolution_clock::now();
         //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
         int backup, redirect;
@@ -688,12 +660,13 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
         close(redirect);
 
         //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
-        hf.build_in_internal_memory(unique_minimizers.begin(), unique_minimizers.size(), get_pthash_options(build_parameters));
+        hf.build_in_internal_memory(unique_minmers.begin(), unique_minmers.size(), get_pthash_options(build_parameters));
 
         fflush(stdout);
         dup2(backup, 1);
         close(backup);
-        assert(hf.num_keys() == unique_minimizers.size());
+        assert(hf.num_keys() == unique_minmers.size());
+        unique_minmers.clear();
 
         std::cout << "DEBUG Time for MPHF build: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -707,7 +680,6 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     }
 
     std::cerr << "DEBUG in-between step 3 and 4\n";
-    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
     utils::printRAMInfo();
 
     //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
@@ -756,7 +728,6 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
               << " milliseconds\n";
 
     std::cerr << "DEBUG end mapping\n";
-    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
     std::cerr << "check mem breakdown for thr rest \n";
     utils::printRAMInfo();
 
