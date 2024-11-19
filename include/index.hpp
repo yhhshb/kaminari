@@ -538,6 +538,8 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
+    auto timestamp_file = std::chrono::high_resolution_clock::now();
+
     //STEP 1 and 2 : READING FILES ===================================================
     {
         if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
@@ -554,6 +556,9 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
         kseq_t* seq = nullptr;
         std::vector<::minimizer::record_t> mms_buffer;
         for (auto filename : m_filenames) {
+            timestamp_file = std::chrono::high_resolution_clock::now();
+            std::cerr << "=/=/=/= DEBUG Reading file: " << filename << " with id " << id << "\n";
+
             if ((fp = gzopen(filename.c_str(), "r")) == NULL)
                 throw std::runtime_error("Unable to open input file " + filename);
             seq = kseq_init(fp);
@@ -629,6 +634,13 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
                     fraction += 0.1;
                 }
             } */
+
+            std::cout << "DEBUG Time for reading file: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+            utils::printRAMInfo();
         }
 
         std::cout << "DEBUG Time for reading files: " 
