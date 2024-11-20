@@ -2,6 +2,8 @@
 #define KAMINARI_INDEX_HPP
 
 #include <iostream>
+#include <mutex>
+#include <shared_mutex>
 #include "constants.hpp"
 #include "utils.hpp"
 #include "build_options.hpp"
@@ -73,8 +75,11 @@ class index
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
         void build2(const build::options_t& build_parameters);
+        void build3(const build::options_t& build_parameters);
         static void process_files(const std::vector<std::string>& files, size_t thread_id, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& local_unique_minmers);
+        static void process_files2(const std::vector<std::string>& files, size_t thread_id,ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, std::unordered_map<uint64_t, std::mutex>& locks, const build::options_t& build_parameters);
         void parallel_process_files(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& unique_minmers, const build::options_t& build_parameters);
+        void parallel_process_files2(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, std::unordered_map<uint64_t, std::mutex>& locks, const build::options_t& build_parameters);
         
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -118,7 +123,7 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
 {
-    build2(build_parameters);
+    build3(build_parameters);
 }
 
 CLASS_HEADER
@@ -525,6 +530,13 @@ struct VectorHash {
     }
 };
 
+
+/* 
+================================================================================
+BUILD 2 : 1 map for each thread then merge (sequentially for now)
+================================================================================
+*/
+
 CLASS_HEADER
 void
 METHOD_HEADER::process_files(const std::vector<std::string>& files,  size_t thread_id, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& local_unique_minmers) {
@@ -671,136 +683,324 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 
     ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors;
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
-
-    std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
     
     //std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
     parallel_process_files(minmer_to_colors, unique_minmers, build_parameters);
-    
-    /*
-    auto start_time = std::chrono::high_resolution_clock::now();
-    auto timestamp_file = std::chrono::high_resolution_clock::now();
 
-    //STEP 1 and 2 : READING FILES ===================================================
     {
-        if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
+    //STEP 3 : BUILDING MPHF ===================================================
+        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
+        int backup, redirect;
+        fflush(stdout);
+        backup = dup(1);
+        redirect = open("/dev/null", O_WRONLY);
+        dup2(redirect, 1);
+        close(redirect);
 
-        std::cerr << "DEBUG Start reading files and aggregating\n";
-        utils::printRAMInfo();
+        //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
+        hf.build_in_internal_memory(unique_minmers.begin(), unique_minmers.size(), get_pthash_options(build_parameters));
 
-        float fraction = 0.1;
-        color_t id = 0;
-        std::size_t total_kmers = 0;
-        std::size_t total_mmers = 0;
-        std::size_t total_minimizers = 0;
-        gzFile fp = nullptr;
-        kseq_t* seq = nullptr;
-        std::vector<::minimizer::record_t> mms_buffer;
-        for (auto filename : m_filenames) {
-            timestamp_file = std::chrono::high_resolution_clock::now();
-            std::cerr << "=/=/=/= DEBUG Reading file: " << filename << " with id " << id << "\n";
+        fflush(stdout);
+        dup2(backup, 1);
+        close(backup);
+        assert(hf.num_keys() == unique_minmers.size());
+        unique_minmers.clear();
 
-            if ((fp = gzopen(filename.c_str(), "r")) == NULL)
-                throw std::runtime_error("Unable to open input file " + filename);
-            seq = kseq_init(fp);
-            while (kseq_read(seq) >= 0) {
-                std::size_t contig_mmer_count;
-                auto contig_kmer_count = ::minimizer::from_string<hash64>(
-                    seq->seq.s, 
-                    seq->seq.l, 
-                    build_parameters.k, 
-                    build_parameters.m, 
-                    build_parameters.seed, 
-                    build_parameters.canonical,
-                    contig_mmer_count,
-                    mms_buffer
-                );
-                total_kmers += contig_kmer_count;
-                total_mmers += contig_mmer_count;
-                total_minimizers += mms_buffer.size();
-                if (build_parameters.verbose > 4) {
-                    std::cerr << "\tRead contig:\n" 
-                              << "\t\t" << contig_kmer_count << " k-mers\n"
-                              << "\t\t" << contig_mmer_count << " m-mers\n"
-                              << "\t\t" << mms_buffer.size() << " minimizers\n";
-                }
-                // remove duplicates and output to tmp file on disk
-                std::vector<minimizer_t> minimizers;
-                for (auto r : mms_buffer) {
-                    minimizers.push_back(r.itself);
-                }
-                std::sort(minimizers.begin(), minimizers.end());
-                auto last = std::unique(minimizers.begin(), minimizers.end());
-                for (auto itr = minimizers.begin(); itr != last; ++itr) {
-                    //avoid duplicates inside a file
-                    if (minmer_to_colors[*itr].empty() || minmer_to_colors[*itr].back() != id){
-                        minmer_to_colors[*itr].push_back(id);
-                    }
-                    unique_minmers.insert(*itr);
-                }
-                mms_buffer.clear();
-
-                if (build_parameters.check) {
-                    std::vector<::minimizer::record_t> kmer_buffer;
-                    std::size_t dummy;
-                    [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
-                        seq->seq.s,
-                        seq->seq.l,
-                        build_parameters.k,
-                        build_parameters.k,
-                        static_cast<uint64_t>(0),
-                        false, // minimizers are canonical or not, kmers are kept as they are for checking
-                        dummy,
-                        kmer_buffer
-                    );
-                    // auto last = std::unique(kmer_buffer.begin(), kmer_buffer.end());
-                    for (auto itr = kmer_buffer.begin(); itr != kmer_buffer.end(); ++itr) {
-                        if (kmer_color_check.find(itr->itself) == kmer_color_check.end()) {
-                            kmer_color_check.emplace(itr->itself, std::vector<color_t> {id});
-                        } else if (kmer_color_check[itr->itself].back() != id) { // this takes care of duplicates
-                            kmer_color_check[itr->itself].push_back(id);
-                        }
-                    }
-                }
-            }
-            if (seq) kseq_destroy(seq);
-            gzclose(fp);
-            fp = nullptr;
-            seq = nullptr;
-            ++id; */
-            /* if (build_parameters.verbose > 1) {
-                if (id >= m_filenames.size() * fraction) {
-                    std::cerr << "\tProcessed " << fraction * 100 << "\% of input files\n";
-                    std::cerr << "\t\t(minimizer, color) pairs: " << tmp_sorted_storage.size() << "\n";
-                    fraction += 0.1;
-                }
-            } */
-
-            /*
-            std::cout << "DEBUG Time for reading file: " 
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - timestamp_file
-                 ).count() 
-              << " milliseconds\n";
-            utils::printRAMInfo();
-        }
-
-        std::cout << "DEBUG Time for reading files: " 
+        std::cout << "DEBUG Time for MPHF build: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::high_resolution_clock::now() - start_time
                  ).count() 
               << " milliseconds\n";
 
-        std::cerr << "DEBUG End reading files + merging\n";
+        std::cerr << "DEBUG End building MPHF\n";
+        std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
         utils::printRAMInfo();
+    }
 
-        if (build_parameters.verbose > 0) {
-            std::cerr << "\ttotal k-mers: " << total_kmers << "\n";
-            std::cerr << "\ttotal m-mers: " << total_mmers << "\n";
-            std::cerr << "\ttotal minimizers (with repetitions): " << total_minimizers << "\n";
+    std::cerr << "DEBUG in-between step 3 and 4\n";
+    utils::printRAMInfo();
+
+    //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
+    {
+        if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        
+        typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
+        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
+
+        if (build_parameters.check) {
+            if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
+            for (std::size_t i = 0; i < hf.num_keys(); ++i) 
+                m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
         }
-    } */
+
+        std::unordered_map<std::vector<uint32_t>, uint32_t, VectorHash> color_to_cid;        
+        uint32_t cid = 0;
+
+        for (const auto& pair : minmer_to_colors) {
+            const auto& minmer = pair.first;
+            const auto& colors = pair.second;
+
+            // Check if this vector already has a cid
+            if (color_to_cid.find(colors) == color_to_cid.end()) {
+                // Assign a new cid
+                color_to_cid[colors] = cid++;
+                cbuild.add_color_set(colors.data(), colors.size());
+            }
+
+            
+            // Map minmer to the cid
+            m_map_builder.set(hf(minmer), cid);
+        }
+
+        
+        cbuild.build(m_ccs);
+        m_map_builder.build(m_map);
+        //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
+    }
+
+    std::cout << "DEBUG Time for dedup + mapping: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+    std::cerr << "DEBUG end mapping\n";
+    std::cerr << "check mem breakdown for thr rest \n";
+    utils::printRAMInfo();
+
+    if (build_parameters.verbose > 0) {
+        std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
+        std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
+    }
+
+    
+}
+
+
+/* 
+================================================================================
+BUILD 3 : 1 shared map and set for all threads
+================================================================================
+*/
+
+CLASS_HEADER
+void
+METHOD_HEADER::parallel_process_files2(
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors,
+    std::unordered_map<uint64_t, std::mutex>& locks,
+    const build::options_t& build_parameters
+) {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    size_t num_threads = build_parameters.nthreads;
+    if (num_threads > m_filenames.size()) {
+        std::cerr << num_threads << " threads given but only " << m_filenames.size() << " files to process. Using " << m_filenames.size() << " threads for step 1 instead.\n";
+        num_threads = m_filenames.size();
+    }
+    std::vector<std::thread> workers;
+    size_t chunk_size = (m_filenames.size() + num_threads - 1) / num_threads; // Round up
+
+    uint32_t thread_id = 0; 
+    auto start = m_filenames.begin();
+    while (start + chunk_size < m_filenames.end()) {
+        std::vector<std::string> chunk_files(start, start + chunk_size);
+        std::cerr << "DEBUG chunk_files size: " << chunk_files.size() << "\n";
+        workers.push_back(
+            std::thread(
+                [chunk_files, thread_id, &minmer_to_colors, &locks, &build_parameters]() {
+                    process_files2(chunk_files, thread_id, minmer_to_colors, locks, build_parameters);
+                }
+            )
+        );
+        start = start + chunk_size;
+        thread_id++;
+    }
+    // Process the last chunk
+    std::vector<std::string> chunk_files(start, m_filenames.end());
+    std::cerr << "DEBUG chunk_files size: " << chunk_files.size() << "\n";
+    workers.push_back(
+        std::thread(
+            [chunk_files, thread_id, &minmer_to_colors, &locks, &build_parameters]() {
+                process_files2(chunk_files, thread_id, minmer_to_colors, locks, build_parameters);
+            }
+        )
+    );
+
+    // Wait for all threads to finish
+    for (auto& t : workers) {
+        t.join();
+    }
+
+    std::cout << "DEBUG Time for all threads to parse: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+}
+
+CLASS_HEADER
+void
+METHOD_HEADER::process_files2(
+    const std::vector<std::string>& files,  
+    size_t thread_id,
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors,
+    std::unordered_map<uint64_t, std::mutex>& locks,
+    const build::options_t& build_parameters
+) {
+    std::cerr << "\tDEBUG hi thread n°" << thread_id << " here :) \n";
+
+    std::size_t total_kmers = 0;
+    std::size_t total_mmers = 0;
+    std::size_t total_minimizers = 0;
+
+    gzFile fp = nullptr;
+    kseq_t* seq = nullptr;
+    std::vector<::minimizer::record_t> mms_buffer;
+    color_t id = thread_id * files.size(); // Unique ID per thread chunk
+
+    for (const auto& filename : files) {
+        if ((fp = gzopen(filename.c_str(), "r")) == nullptr) {
+            throw std::runtime_error("Unable to open input file " + filename);
+        }
+        seq = kseq_init(fp);
+        while (kseq_read(seq) >= 0) {
+            std::size_t contig_mmer_count;
+            auto contig_kmer_count = ::minimizer::from_string<hash64>(
+                seq->seq.s, 
+                seq->seq.l, 
+                build_parameters.k, 
+                build_parameters.m, 
+                build_parameters.seed, 
+                build_parameters.canonical,
+                contig_mmer_count,
+                mms_buffer
+            );
+            total_kmers += contig_kmer_count;
+            total_mmers += contig_mmer_count;
+            total_minimizers += mms_buffer.size();
+            if (build_parameters.verbose > 4) {
+                std::cerr << "\tRead contig:\n" 
+                            << "\t\t" << contig_kmer_count << " k-mers\n"
+                            << "\t\t" << contig_mmer_count << " m-mers\n"
+                            << "\t\t" << mms_buffer.size() << " minimizers\n";
+            }
+
+            std::vector<minimizer_t> minimizers;
+            for (auto r : mms_buffer) {
+                minimizers.push_back(r.itself);
+            }
+            std::sort(minimizers.begin(), minimizers.end());
+            auto last = std::unique(minimizers.begin(), minimizers.end());
+            for (auto itr = minimizers.begin(); itr != last; ++itr) {
+                uint64_t minmer = *itr;
+                //std::cerr << "\tDEBUG thread" << thread_id << " processing minmer " << minmer << "\n";
+
+                // Ensure a lock exists for this minmer
+                {
+                    std::lock_guard<std::mutex> lock(locks[minmer]);
+                    //std::cerr << "\tDEBUG thread" << thread_id << " locked minmer " << minmer << "\n";
+                    if(std::find(minmer_to_colors[minmer].begin(), minmer_to_colors[minmer].end(), id) == minmer_to_colors[minmer].end()) {
+                        minmer_to_colors[minmer].push_back(id);
+                    } 
+                }
+            }
+            mms_buffer.clear();
+        }
+        if (seq) kseq_destroy(seq);
+        gzclose(fp);
+        fp = nullptr;
+        seq = nullptr;
+        id++;
+    }
+}
+
+CLASS_HEADER
+void
+METHOD_HEADER::build3(const build::options_t& build_parameters)
+{
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    // Initialize shared data structures
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors;
+    ankerl::unordered_dense::set<uint64_t> unique_minmers;
+    std::unordered_map<uint64_t, std::mutex> locks;
+
+    ankerl::unordered_dense::map<uint64_t, uint64_t> first_pass;
+
+    std::size_t total_kmers = 0;
+    std::size_t total_mmers = 0;
+    std::size_t total_minimizers = 0;
+
+    gzFile fp = nullptr;
+    kseq_t* seq = nullptr;
+    std::vector<::minimizer::record_t> mms_buffer;
+
+    for (const auto& filename : m_filenames) {
+        if ((fp = gzopen(filename.c_str(), "r")) == nullptr) {
+            throw std::runtime_error("Unable to open input file " + filename);
+        }
+        seq = kseq_init(fp);
+        while (kseq_read(seq) >= 0) {
+            std::size_t contig_mmer_count;
+            auto contig_kmer_count = ::minimizer::from_string<hash64>(
+                seq->seq.s, 
+                seq->seq.l, 
+                build_parameters.k, 
+                build_parameters.m, 
+                build_parameters.seed, 
+                build_parameters.canonical,
+                contig_mmer_count,
+                mms_buffer
+            );
+            total_kmers += contig_kmer_count;
+            total_mmers += contig_mmer_count;
+            total_minimizers += mms_buffer.size();
+            if (build_parameters.verbose > 4) {
+                std::cerr << "\tRead contig:\n" 
+                            << "\t\t" << contig_kmer_count << " k-mers\n"
+                            << "\t\t" << contig_mmer_count << " m-mers\n"
+                            << "\t\t" << mms_buffer.size() << " minimizers\n";
+            }
+
+            std::vector<minimizer_t> minimizers;
+            for (auto r : mms_buffer) {
+                minimizers.push_back(r.itself);
+            }
+            std::sort(minimizers.begin(), minimizers.end());
+            auto last = std::unique(minimizers.begin(), minimizers.end());
+            for (auto itr = minimizers.begin(); itr != last; ++itr) {
+                uint64_t minmer = *itr;
+                first_pass[minmer]++;
+                locks[minmer];
+            }
+            mms_buffer.clear();
+        }
+        if (seq) kseq_destroy(seq);
+        gzclose(fp);
+        fp = nullptr;
+        seq = nullptr;
+    }
+
+    for (const auto& [minmer, count] : first_pass) {
+        minmer_to_colors[minmer].reserve(count);
+    }
+
+    parallel_process_files2(minmer_to_colors, locks, build_parameters);
+
+    for (auto& [minmer, colors] : minmer_to_colors) {
+        std::sort(colors.begin(), colors.end());
+        unique_minmers.insert(minmer);
+    }
+
+    std::cout << "DEBUG Total time for step1: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
 
     {
     //STEP 3 : BUILDING MPHF ===================================================
@@ -903,35 +1103,32 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 #endif // KAMINARI_INDEX_HPP
 
 
-
-
 /*
-./kaminari_dev build -i fof_ecoli.txt -o ecoli.kaminari -k 31 -m 19 -t 16 -d ./tmp -g 12 -a -v 1 && ./kaminari_build build -i fof_ecoli.txt -o ecoli.kaminari -k 31 -m 19 -t 16 -d ./tmp -g 12 -a -v 1
+BUG with buildv2 and t=3, with small ecoli fof, wrong nb of colors
+
+
+./kaminari_dev build -i fof_ecoli_small.txt -o ecoli_1.kaminari -k 31 -m 19 -t 2 -d ./tmp -g 12 -a -v 1
 Step 1: reading files
-	total k-mers: 18890032184
-	total m-mers: 18901063056
-	total minimizers (with repetitions): 2699253669
+	total k-mers: 101993239
+	total m-mers: 102019320
+	total minimizers (with repetitions): 14571168
 Step 2: aggregating colors
-Step 3: building the MPHF for 19505965 minimizers
+Step 3: building the MPHF for 2302166 minimizers
 Step 4: list deduplication and mapping
-m_num_docs: 3682
-m_sparse_set_threshold_size 920
-m_very_dense_set_threshold_size 2761
-processed 500000 lists
-processed 1000000 lists
-processed 1500000 lists
-processed 2000000 lists
-processed 2500000 lists
-processed 2867442 lists
-	m_num_total_integers 2226373585
-	total bits for ints = 3720737753
-	total bits per offsets = 37690752
-	total bits = 3758428505n	offsets: 0.0169292 bits/int
-	lists: 1.67121 bits/int
-Number of ids: 3682
-Number of colors (lists of ids):2867442
-The list of input filenames weights: 316951 Bytes
-The MPHF of minimizers weights: 6365339 Bytes
-Colors weight: 469803596 Bytes
-The mapping from minimizers to colors weights: 60956184 Bytes
-*/
+m_num_docs: 20
+m_sparse_set_threshold_size 5
+m_very_dense_set_threshold_size 15
+processed 17941 lists
+	m_num_total_integers 176827
+	total bits for ints = 483992
+	total bits per offsets = 133952
+	total bits = 617944n	offsets: 0.757531 bits/int
+	lists: 2.73709 bits/int
+Number of ids: 20
+Number of colors (lists of ids):17941
+The list of input filenames weights: 1643 Bytes
+The MPHF of minimizers weights: 766025 Bytes
+Colors weight: 77276 Bytes
+The mapping from minimizers to colors weights: 6331000 Bytes
+
+Written 7175978 Bytes*/
