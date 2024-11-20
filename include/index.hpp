@@ -989,13 +989,12 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
         minmer_to_colors[minmer].reserve(count);
     }
 
-    std::cout << "DEBUG Time for first pass: " 
+    std::cout << "DEBUG time first pass: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::high_resolution_clock::now() - start_time
                  ).count() 
               << " milliseconds\n";
 
-    {
 
     start_time = std::chrono::high_resolution_clock::now();
 
@@ -1006,15 +1005,14 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
         unique_minmers.insert(minmer);
     }
 
-    std::cout << "DEBUG Time for second pass, end of step 1: " 
+    std::cout << "DEBUG time second pass: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::high_resolution_clock::now() - start_time
                  ).count() 
               << " milliseconds\n";
 
-    {
 
-    
+    {
     //STEP 3 : BUILDING MPHF ===================================================
         if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
         start_time = std::chrono::high_resolution_clock::now();
