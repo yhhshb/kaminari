@@ -73,6 +73,8 @@ class index
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
         void build2(const build::options_t& build_parameters);
+        static void process_files(const std::vector<std::string>& files, size_t thread_id, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& local_unique_minmers);
+        void parallel_process_files(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& unique_minmers, const build::options_t& build_parameters);
         
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -525,19 +527,153 @@ struct VectorHash {
 
 CLASS_HEADER
 void
+METHOD_HEADER::process_files(const std::vector<std::string>& files,  size_t thread_id, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& local_unique_minmers) {
+    std::cerr << "\tDEBUG hi thread n°" << thread_id << " here :) \n";
+
+    std::size_t total_kmers = 0;
+    std::size_t total_mmers = 0;
+    std::size_t total_minimizers = 0;
+
+    gzFile fp = nullptr;
+    kseq_t* seq = nullptr;
+    std::vector<::minimizer::record_t> mms_buffer;
+    color_t id = thread_id * files.size(); // Unique ID per thread chunk
+
+    for (const auto& filename : files) {
+        if ((fp = gzopen(filename.c_str(), "r")) == nullptr) {
+            throw std::runtime_error("Unable to open input file " + filename);
+        }
+        seq = kseq_init(fp);
+        while (kseq_read(seq) >= 0) {
+            std::size_t contig_mmer_count;
+            auto contig_kmer_count = ::minimizer::from_string<hash64>(
+                seq->seq.s, 
+                seq->seq.l, 
+                build_parameters.k, 
+                build_parameters.m, 
+                build_parameters.seed, 
+                build_parameters.canonical,
+                contig_mmer_count,
+                mms_buffer
+            );
+            total_kmers += contig_kmer_count;
+            total_mmers += contig_mmer_count;
+            total_minimizers += mms_buffer.size();
+            if (build_parameters.verbose > 4) {
+                std::cerr << "\tRead contig:\n" 
+                            << "\t\t" << contig_kmer_count << " k-mers\n"
+                            << "\t\t" << contig_mmer_count << " m-mers\n"
+                            << "\t\t" << mms_buffer.size() << " minimizers\n";
+            }
+            // remove duplicates and output to tmp file on disk
+            std::vector<minimizer_t> minimizers;
+            for (auto r : mms_buffer) {
+                minimizers.push_back(r.itself);
+            }
+            std::sort(minimizers.begin(), minimizers.end());
+            auto last = std::unique(minimizers.begin(), minimizers.end());
+            for (auto itr = minimizers.begin(); itr != last; ++itr) {
+                //avoid duplicates inside a file
+                if (local_minmer_to_colors[*itr].empty() || local_minmer_to_colors[*itr].back() != id){
+                    local_minmer_to_colors[*itr].push_back(id);
+                }
+                local_unique_minmers.insert(*itr);
+            }
+            mms_buffer.clear();
+        }
+        if (seq) kseq_destroy(seq);
+        gzclose(fp);
+        fp = nullptr;
+        seq = nullptr;
+        ++id;
+    }
+}
+
+
+CLASS_HEADER
+void
+METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& unique_minmers, const build::options_t& build_parameters) {
+    size_t num_threads = build_parameters.nthreads;
+    if (num_threads > m_filenames.size()) {
+        std::cerr << num_threads << " threads given but only " << m_filenames.size() << " files to process. Using " << m_filenames.size() << " threads for step 1 instead.\n";
+        num_threads = m_filenames.size();
+    }
+    std::vector<std::thread> workers;
+    size_t chunk_size = (m_filenames.size() + num_threads - 1) / num_threads; // Round up
+    
+    std::vector<ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>> thread_minmer_to_colors(num_threads);
+    std::vector<ankerl::unordered_dense::set<uint64_t>> thread_unique_minmers(num_threads);
+
+    uint32_t thread_id = 0; 
+    auto start = m_filenames.begin();
+    while (start + chunk_size < m_filenames.end()){
+        std::vector<std::string> chunk_files(start, start + chunk_size);
+        workers.push_back(
+            std::thread(
+                [chunk_files, thread_id, &build_parameters, &thread_minmer_to_colors, &thread_unique_minmers]() {
+                    process_files(chunk_files, thread_id, build_parameters, thread_minmer_to_colors[thread_id], thread_unique_minmers[thread_id]);
+                }
+            )
+        );
+        start = start + chunk_size;
+        thread_id++;
+    }
+    //last chunk of file, might be empty
+    std::vector<std::string> chunk_files(start, m_filenames.end());
+    workers.push_back(
+        std::thread(
+            [chunk_files, thread_id, &build_parameters, &thread_minmer_to_colors, &thread_unique_minmers]() {
+                process_files(chunk_files, thread_id, build_parameters, thread_minmer_to_colors[thread_id], thread_unique_minmers[thread_id]);
+            }
+        )
+    );
+
+    
+    // Wait for all threads to finish
+    for (auto& t : workers) {
+        t.join();
+    }
+
+    uint64_t total_colors = 0;
+
+    for (size_t i = 0; i < num_threads; ++i) {
+        // Merge thread_minmer_to_colors into global_minmer_to_colors
+        for (const auto& [key, value] : thread_minmer_to_colors[i]) {
+            //std::cerr << key << value << "\n";
+            total_colors += value.size();
+            auto& global_vec = minmer_to_colors[key];
+            global_vec.insert(global_vec.end(), value.begin(), value.end());
+            std::sort(global_vec.begin(), global_vec.end());
+            global_vec.erase(std::unique(global_vec.begin(), global_vec.end()), global_vec.end());
+        }
+
+        /* for (const auto& [key, value] : minmer_to_colors) {
+            std::cerr << key << value << "\n";
+        } */
+
+        // Merge thread_unique_minmers into global_unique_minmers
+        unique_minmers.insert(thread_unique_minmers[i].begin(), thread_unique_minmers[i].end());
+    }
+    std::cerr << "Total colors: " << total_colors << "\n";
+}
+
+CLASS_HEADER
+void
 METHOD_HEADER::build2(const build::options_t& build_parameters)
 {
-    std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors;
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
 
     std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
+    
+    //std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
-
+    parallel_process_files(minmer_to_colors, unique_minmers, build_parameters);
+    
+    /*
     auto start_time = std::chrono::high_resolution_clock::now();
-
     auto timestamp_file = std::chrono::high_resolution_clock::now();
 
     //STEP 1 and 2 : READING FILES ===================================================
@@ -626,7 +762,7 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
             gzclose(fp);
             fp = nullptr;
             seq = nullptr;
-            ++id;
+            ++id; */
             /* if (build_parameters.verbose > 1) {
                 if (id >= m_filenames.size() * fraction) {
                     std::cerr << "\tProcessed " << fraction * 100 << "\% of input files\n";
@@ -635,9 +771,10 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
                 }
             } */
 
+            /*
             std::cout << "DEBUG Time for reading file: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - start_time
+                     std::chrono::high_resolution_clock::now() - timestamp_file
                  ).count() 
               << " milliseconds\n";
             utils::printRAMInfo();
@@ -657,7 +794,7 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
             std::cerr << "\ttotal m-mers: " << total_mmers << "\n";
             std::cerr << "\ttotal minimizers (with repetitions): " << total_minimizers << "\n";
         }
-    }
+    } */
 
     {
     //STEP 3 : BUILDING MPHF ===================================================
@@ -758,3 +895,37 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 } // namespace kaminari
 
 #endif // KAMINARI_INDEX_HPP
+
+
+
+
+/*
+./kaminari_dev build -i fof_ecoli.txt -o ecoli.kaminari -k 31 -m 19 -t 16 -d ./tmp -g 12 -a -v 1 && ./kaminari_build build -i fof_ecoli.txt -o ecoli.kaminari -k 31 -m 19 -t 16 -d ./tmp -g 12 -a -v 1
+Step 1: reading files
+	total k-mers: 18890032184
+	total m-mers: 18901063056
+	total minimizers (with repetitions): 2699253669
+Step 2: aggregating colors
+Step 3: building the MPHF for 19505965 minimizers
+Step 4: list deduplication and mapping
+m_num_docs: 3682
+m_sparse_set_threshold_size 920
+m_very_dense_set_threshold_size 2761
+processed 500000 lists
+processed 1000000 lists
+processed 1500000 lists
+processed 2000000 lists
+processed 2500000 lists
+processed 2867442 lists
+	m_num_total_integers 2226373585
+	total bits for ints = 3720737753
+	total bits per offsets = 37690752
+	total bits = 3758428505n	offsets: 0.0169292 bits/int
+	lists: 1.67121 bits/int
+Number of ids: 3682
+Number of colors (lists of ids):2867442
+The list of input filenames weights: 316951 Bytes
+The MPHF of minimizers weights: 6365339 Bytes
+Colors weight: 469803596 Bytes
+The mapping from minimizers to colors weights: 60956184 Bytes
+*/
