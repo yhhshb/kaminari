@@ -593,6 +593,8 @@ METHOD_HEADER::process_files(const std::vector<std::string>& files,  size_t thre
 CLASS_HEADER
 void
 METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& unique_minmers, const build::options_t& build_parameters) {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     size_t num_threads = build_parameters.nthreads;
     if (num_threads > m_filenames.size()) {
         std::cerr << num_threads << " threads given but only " << m_filenames.size() << " files to process. Using " << m_filenames.size() << " threads for step 1 instead.\n";
@@ -634,27 +636,31 @@ METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std
         t.join();
     }
 
-    uint64_t total_colors = 0;
+    std::cout << "DEBUG Time for all threads to parse: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+    start_time = std::chrono::high_resolution_clock::now();
 
     for (size_t i = 0; i < num_threads; ++i) {
         // Merge thread_minmer_to_colors into global_minmer_to_colors
         for (const auto& [key, value] : thread_minmer_to_colors[i]) {
-            //std::cerr << key << value << "\n";
-            total_colors += value.size();
             auto& global_vec = minmer_to_colors[key];
             global_vec.insert(global_vec.end(), value.begin(), value.end());
             std::sort(global_vec.begin(), global_vec.end());
             global_vec.erase(std::unique(global_vec.begin(), global_vec.end()), global_vec.end());
         }
 
-        /* for (const auto& [key, value] : minmer_to_colors) {
-            std::cerr << key << value << "\n";
-        } */
-
         // Merge thread_unique_minmers into global_unique_minmers
         unique_minmers.insert(thread_unique_minmers[i].begin(), thread_unique_minmers[i].end());
     }
-    std::cerr << "Total colors: " << total_colors << "\n";
+    std::cout << "DEBUG Time to merge threads results " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
 }
 
 CLASS_HEADER
