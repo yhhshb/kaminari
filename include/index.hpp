@@ -76,10 +76,18 @@ class index
         void build(const build::options_t& build_parameters);
         void build2(const build::options_t& build_parameters);
         void build3(const build::options_t& build_parameters);
-        static void process_files(const std::vector<std::string>& files, size_t thread_id, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& local_unique_minmers);
+        static void process_files(const std::vector<std::string>& files, uint32_t docid, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors);
         static void process_files2(const std::vector<std::string>& files, size_t thread_id,ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, std::unordered_map<uint64_t, std::mutex>& locks, const build::options_t& build_parameters);
         void parallel_process_files(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& unique_minmers, const build::options_t& build_parameters);
         void parallel_process_files2(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, std::unordered_map<uint64_t, std::mutex>& locks, const build::options_t& build_parameters);
+        
+        ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>> process_and_merge(
+            const std::vector<std::string>& inputs,      // Input files
+            size_t start, size_t end,                    // Range of files to process
+            size_t batch_size,                           // Size of each batch
+            const build::options_t& build_parameters,    // Build options
+            size_t thread_start_id                       // Thread start ID
+        );
         
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -123,7 +131,7 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
 {
-    build3(build_parameters);
+    build2(build_parameters);
 }
 
 CLASS_HEADER
@@ -536,20 +544,83 @@ struct VectorHash {
 BUILD 2 : 1 map for each thread then merge (sequentially for now)
 ================================================================================
 */
+CLASS_HEADER
+ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>>
+METHOD_HEADER:: process_and_merge(
+    const std::vector<std::string>& inputs,      // Input files
+    size_t start, size_t end,                    // Range of files to process
+    size_t batch_size,                           // Size of each batch
+    const build::options_t& build_parameters,    // Build options
+    size_t thread_start_id                       // Thread start ID
+) {
+    std::cerr << "DEBUG process_and_merge called with parameters: inputs size:" << inputs.size() << " start:" << start << " end:" << end << " batch_size:" << batch_size << " thread_start_id:" << thread_start_id << "\n";
+    // Base case: If a single file is left, process it directly
+    if (end - start == 1) {
+        std::cerr << "DEBUG process_and_merge base case\n";
+        ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> result;
+        std::vector<std::string> single_file = {inputs[start]};
+        process_files(single_file, thread_start_id, build_parameters, result);
+        return result;
+    }
+
+    // Base case: If we are processing a batch of size <= batch_size
+    if (end - start <= batch_size) {
+        std::cerr << "DEBUG process_and_merge base case 2\n";
+        std::vector<std::thread> workers;
+        std::vector<ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>> thread_maps(end - start);
+
+        for (size_t i = start; i < end; ++i) {
+            size_t thread_id = i - start;
+            workers.emplace_back([&inputs, &build_parameters, &thread_maps, thread_id, i, thread_start_id]() {
+                process_files({inputs[i]}, thread_start_id + thread_id, build_parameters, thread_maps[thread_id]);
+            });
+        }
+
+        for (auto& t : workers) {
+            t.join();
+        }
+
+        // Merge all thread maps into a single result
+        ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> batch_result;
+        for (const auto& thread_map : thread_maps) {
+            for (const auto& [key, value] : thread_map) {
+                auto& global_vec = batch_result[key];
+                global_vec.insert(global_vec.end(), value.begin(), value.end());
+                std::sort(global_vec.begin(), global_vec.end());
+                global_vec.erase(std::unique(global_vec.begin(), global_vec.end()), global_vec.end());
+            }
+        }
+        return batch_result;
+    }
+    std::cerr << "DEBUG process_and_merge recursive case\n";
+    // Recursive case: Split into two halves and merge their results
+    size_t mid = start + (end - start) / 2;
+
+
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> left_result = process_and_merge(inputs, start, mid, batch_size, build_parameters, thread_start_id);
+
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> right_result = process_and_merge(inputs, mid, end, batch_size, build_parameters, thread_start_id + (mid - start));
+
+    // Merge left and right results
+    for (const auto& [key, value] : right_result) {
+        auto& global_vec = left_result[key];
+        global_vec.insert(global_vec.end(), value.begin(), value.end());
+        std::sort(global_vec.begin(), global_vec.end());
+        global_vec.erase(std::unique(global_vec.begin(), global_vec.end()), global_vec.end());
+    }
+    return left_result;
+}
 
 CLASS_HEADER
 void
-METHOD_HEADER::process_files(const std::vector<std::string>& files,  size_t thread_id, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& local_unique_minmers) {
-    std::cerr << "\tDEBUG hi thread n°" << thread_id << " here :) \n";
-
+METHOD_HEADER::process_files(const std::vector<std::string>& files,  uint32_t docid, const build::options_t& build_parameters, ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& local_minmer_to_colors) {
     std::size_t total_kmers = 0;
     std::size_t total_mmers = 0;
-    std::size_t total_minimizers = 0;
+    std::size_t total_minimizers = 0;   
 
     gzFile fp = nullptr;
     kseq_t* seq = nullptr;
     std::vector<::minimizer::record_t> mms_buffer;
-    color_t id = thread_id * files.size(); // Unique ID per thread chunk
 
     for (const auto& filename : files) {
         if ((fp = gzopen(filename.c_str(), "r")) == nullptr) {
@@ -586,10 +657,9 @@ METHOD_HEADER::process_files(const std::vector<std::string>& files,  size_t thre
             auto last = std::unique(minimizers.begin(), minimizers.end());
             for (auto itr = minimizers.begin(); itr != last; ++itr) {
                 //avoid duplicates inside a file
-                if (local_minmer_to_colors[*itr].empty() || local_minmer_to_colors[*itr].back() != id){
-                    local_minmer_to_colors[*itr].push_back(id);
+                if (local_minmer_to_colors[*itr].empty() || local_minmer_to_colors[*itr].back() != docid){
+                    local_minmer_to_colors[*itr].push_back(docid);
                 }
-                local_unique_minmers.insert(*itr);
             }
             mms_buffer.clear();
         }
@@ -597,11 +667,11 @@ METHOD_HEADER::process_files(const std::vector<std::string>& files,  size_t thre
         gzclose(fp);
         fp = nullptr;
         seq = nullptr;
-        ++id;
+        ++docid;
     }
 }
 
-
+/*
 CLASS_HEADER
 void
 METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std::vector<color_t>>& minmer_to_colors, ankerl::unordered_dense::set<uint64_t>& unique_minmers, const build::options_t& build_parameters) {
@@ -622,10 +692,12 @@ METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std
     auto start = m_filenames.begin();
     while (start + chunk_size < m_filenames.end()){
         std::vector<std::string> chunk_files(start, start + chunk_size);
+        std::cerr << "DEBUG chunk_files size: " << chunk_files.size() << "\n";
+        std::cerr << "DEBUG chunk_files for thread_id " << thread_id << " : " << chunk_files << "\n";
         workers.push_back(
             std::thread(
-                [chunk_files, thread_id, &build_parameters, &thread_minmer_to_colors, &thread_unique_minmers]() {
-                    process_files(chunk_files, thread_id, build_parameters, thread_minmer_to_colors[thread_id], thread_unique_minmers[thread_id]);
+                [chunk_files, thread_id, chunk_size, &build_parameters, &thread_minmer_to_colors, &thread_unique_minmers]() {
+                    process_files(chunk_files, thread_id*chunk_size, build_parameters, thread_minmer_to_colors[thread_id], thread_unique_minmers[thread_id]);
                 }
             )
         );
@@ -634,10 +706,12 @@ METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std
     }
     //last chunk of file, might be empty
     std::vector<std::string> chunk_files(start, m_filenames.end());
+    std::cerr << "DEBUG chunk_files size (DIFF than 0 = bug): " << chunk_files.size() << "\n";
+    std::cerr << "DEBUG chunk_files for thread_id " << thread_id << " : " << chunk_files << "\n";
     workers.push_back(
         std::thread(
-            [chunk_files, thread_id, &build_parameters, &thread_minmer_to_colors, &thread_unique_minmers]() {
-                process_files(chunk_files, thread_id, build_parameters, thread_minmer_to_colors[thread_id], thread_unique_minmers[thread_id]);
+            [chunk_files, thread_id, chunk_size, &build_parameters, &thread_minmer_to_colors, &thread_unique_minmers]() {
+                process_files(chunk_files, thread_id*chunk_size, build_parameters, thread_minmer_to_colors[thread_id], thread_unique_minmers[thread_id]);
             }
         )
     );
@@ -657,6 +731,8 @@ METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std
     start_time = std::chrono::high_resolution_clock::now();
 
     for (size_t i = 0; i < num_threads; ++i) {
+        std::cerr << "DEBUG Merging thread " << i << " results\n";
+        std::cerr << "DEBUG thread_minmer_to_colors size: " << thread_minmer_to_colors[i].size() << "\n";
         // Merge thread_minmer_to_colors into global_minmer_to_colors
         for (const auto& [key, value] : thread_minmer_to_colors[i]) {
             auto& global_vec = minmer_to_colors[key];
@@ -673,7 +749,7 @@ METHOD_HEADER::parallel_process_files(ankerl::unordered_dense::map<uint64_t, std
                      std::chrono::high_resolution_clock::now() - start_time
                  ).count() 
               << " milliseconds\n";
-}
+}*/
 
 CLASS_HEADER
 void
@@ -681,12 +757,19 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 {
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors;
+    //ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors;
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
     
     //std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
-    parallel_process_files(minmer_to_colors, unique_minmers, build_parameters);
+    //parallel_process_files(minmer_to_colors, unique_minmers, build_parameters);
+    ankerl::unordered_dense::map<uint64_t, std::vector<color_t>> minmer_to_colors = process_and_merge(
+        m_filenames, 0, m_filenames.size(), build_parameters.nthreads, build_parameters, 0
+    );
+
+    for (const auto& [key, value] : minmer_to_colors) {
+        unique_minmers.insert(key);
+    }
 
     {
     //STEP 3 : BUILDING MPHF ===================================================
