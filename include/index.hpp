@@ -549,10 +549,6 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, Result& 
     fp = nullptr;
     seq = nullptr;
     result.depth = 1; // Depth 1 for individual files
-    {//DEBUG
-        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-        std::cerr << "(worker) Thread" << std::this_thread::get_id() << " Reading file " << file << " with doc_id " << doc_id << "\n";
-    }
 }
 
 // Function to merge two results
@@ -596,10 +592,6 @@ METHOD_HEADER::worker_thread(
             });
 
             if (all_done.load() && task_stack.empty()) { //all done should be set to 1 only if stack empty but w/e
-                {//DEBUG
-                    std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                    std::cerr << "(worker) Thread" << std::this_thread::get_id() << ": no more tasks, exiting\n";
-                }
                 break; // Exit if no tasks and manager is done
             }
 
@@ -609,15 +601,7 @@ METHOD_HEADER::worker_thread(
             }
         }
         if (task.f) {
-            {//DEBUG
-                std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                std::cerr << "(worker) Thread" << std::this_thread::get_id() << ": executing task " << task.desc << "\n";
-            }
             task.f();
-            {//DEBUG
-                std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                std::cerr << "(worker) Thread" << std::this_thread::get_id() << ": task " << task.desc << " done\n";
-            }
         }
     }
 }
@@ -637,17 +621,6 @@ METHOD_HEADER::manager_thread(
     std::mutex& debug_cerr_mutex) 
 {
     while (true) {
-        {//DEBUG
-            std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-            std::cerr << "(manager) Thread" << std::this_thread::get_id() << ": looping around\n";
-            std::cerr << "task_stack size: " << task_stack.size() << " \n";
-            std::cerr << "results size: " << results.size() << " and state : \n";
-            for (const auto& res : results) {
-                std::cerr << "\tDepth: " << res.depth << ", data: " << res.data.size() << " entries\n";
-            }
-            std::cerr << "running_task: " << running_task.load() << "\n";
-        }
-
         {
             std::lock_guard<std::mutex> res_lock(results_mutex);
             std::lock_guard<std::mutex> stack_lock(task_stack_mutex);
@@ -661,10 +634,6 @@ METHOD_HEADER::manager_thread(
                 if (!task_stack.empty() || running_task.load() > 0) {
                     all_done.store(false); // Revert if inconsistent
                 } else {
-                    {//DEBUG
-                        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                        std::cerr << "(manager) Thread" << std::this_thread::get_id() << ": all done\n";
-                    }
                     break; // Consistent, safe to exit
                 }
             }
@@ -720,15 +689,6 @@ METHOD_HEADER::manager_thread(
         } */
         //wait a bit to do not spent time looping and keep locking access to stack and results
         std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
-        
-        
-        {//DEBUG
-            std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-            std::cerr << "(manager) Thread" << std::this_thread::get_id() << ": passed test, heads towards merging. Results state :\n";
-            for (const auto& res : results) {
-                std::cerr << "\tDepth: " << res.depth << ", data: " << res.data.size() << " entries\n";
-            }
-        }
     }
 }
 
