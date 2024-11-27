@@ -502,12 +502,6 @@ Build 2 is a parallel version of build, using a thread pool to read files and me
 CLASS_HEADER
 void 
 METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, minmer_set_docid& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
-
-    {
-        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-        std::cerr << "DEBUG Reading file " << file << "\n";
-    }
-
     std::size_t total_kmers = 0;
     std::size_t total_mmers = 0;
     std::size_t total_minimizers = 0;
@@ -661,10 +655,6 @@ METHOD_HEADER::manager_thread(
             std::lock_guard<std::mutex> lock(results_mutex);
             // Find two results with the same depth to merge
             while (results.size() > 1) {
-                {
-                    std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                    std::cerr << "DEBUG Merging results\n";
-                }
                 result_map left = std::move(results.front());
                 results.pop_front();
 
@@ -698,10 +688,6 @@ METHOD_HEADER::manager_thread(
             {
                 std::lock_guard<std::mutex> lock(results_depth1_mutex);
                 while (results_depth1.size() > 1) {
-                    {
-                        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                        std::cerr << "DEBUG Merging d1 results queue size : " << results_depth1.size() << "\n";
-                    }
                     minmer_set_docid left = std::move(results_depth1.front());
                     results_depth1.pop_front();
 
