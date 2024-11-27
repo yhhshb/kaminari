@@ -106,16 +106,19 @@ class index
             std::mutex& debug_cerr_mutex);
         void manager_thread(
             std::stack<Function>& task_stack,
+            std::mutex& task_stack_mutex,
+            std::deque<minmer_set_docid>& results_depth1,
+            std::mutex& results_depth1_mutex,
             std::deque<result_map>& results,
             std::mutex& results_mutex,
-            std::mutex& task_stack_mutex,
             std::condition_variable& cv,
             std::atomic<uint32_t>& running_task,
             std::atomic<bool>& all_done,
             std::mutex& debug_cerr_mutex);
         result_map merge_results(const result_map& left, const result_map& right, std::mutex& debug_cerr_mutex);
+        result_map merge_results(const minmer_set_docid& left, const minmer_set_docid& right, std::mutex& debug_cerr_mutex);
         // Function to read a file
-        void read_file_task(const std::string& file, uint32_t doc_id, result_map& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
+        void read_file_task(const std::string& file, uint32_t doc_id, minmer_set_docid& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
 
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -498,7 +501,13 @@ Build 2 is a parallel version of build, using a thread pool to read files and me
 // Function to read a file
 CLASS_HEADER
 void 
-METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, result_map& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
+METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, minmer_set_docid& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
+
+    {
+        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+        std::cerr << "DEBUG Reading file " << file << "\n";
+    }
+
     std::size_t total_kmers = 0;
     std::size_t total_mmers = 0;
     std::size_t total_minimizers = 0;
@@ -532,12 +541,7 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, result_m
         // remove duplicates and output to tmp file on disk
         std::vector<minimizer_t> minimizers;
         for (auto r : mms_buffer) {
-            minimizers.push_back(r.itself);
-        }
-        std::sort(minimizers.begin(), minimizers.end());
-        auto last = std::unique(minimizers.begin(), minimizers.end());
-        for (auto itr = minimizers.begin(); itr != last; ++itr) {
-            result[*itr].push_back(doc_id);
+            result.first.insert(r.itself);
         }
         mms_buffer.clear();
     }
@@ -547,6 +551,21 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, result_m
     seq = nullptr;
 }
 
+// Function to merge two depth_1 results
+CLASS_HEADER
+result_map
+METHOD_HEADER::merge_results(const minmer_set_docid& left, const minmer_set_docid& right, std::mutex& debug_cerr_mutex) {
+    result_map merged;
+    // Determine insertion order based on docid
+    if (left.second < right.second) {
+        for (const auto& key : left.first) merged[key].push_back(left.second);
+        for (const auto& key : right.first) merged[key].push_back(right.second);
+    } else {
+        for (const auto& key : right.first) merged[key].push_back(right.second);
+        for (const auto& key : left.first) merged[key].push_back(left.second);
+    }
+    return merged;
+}
 // Function to merge two results
 CLASS_HEADER
 result_map
@@ -561,8 +580,8 @@ METHOD_HEADER::merge_results(const result_map& left, const result_map& right, st
         vec.insert(vec.end(), value.begin(), value.end());
     }
     for (auto& [key, vec] : merged) {
-        std::sort(vec.begin(), vec.end());
-        vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+        std::sort(vec.begin(), vec.end()); //could be replaced by a set ? and make it a vector sorted at the end
+        //vec.erase(std::unique(vec.begin(), vec.end()), vec.end()); -> useless for now because 1file : 1result, might change with future optis
     }
     return merged;
 }
@@ -607,19 +626,22 @@ CLASS_HEADER
 void
 METHOD_HEADER::manager_thread(
     std::stack<Function>& task_stack,
+    std::mutex& task_stack_mutex,
+    std::deque<minmer_set_docid>& results_depth1,
+    std::mutex& results_depth1_mutex,
     std::deque<result_map>& results,
     std::mutex& results_mutex,
-    std::mutex& task_stack_mutex,
     std::condition_variable& cv,
     std::atomic<uint32_t>& running_task,
     std::atomic<bool>& all_done,
-    std::mutex& debug_cerr_mutex) 
+    std::mutex& debug_cerr_mutex)
 {
     while (true) {
         {
+            std::lock_guard<std::mutex> resd1_lock(results_depth1_mutex);
             std::lock_guard<std::mutex> res_lock(results_mutex);
             std::lock_guard<std::mutex> stack_lock(task_stack_mutex);
-            if (task_stack.empty() && running_task.load() == 0 && results.size() == 1) { 
+            if (task_stack.empty() && running_task.load() == 0 && results_depth1.size() == 0 && results.size() == 1) { 
                 //need no more tasks to do, no running tasks, 1 result left to get out
                 all_done.store(true);
                 cv.notify_all();
@@ -632,13 +654,17 @@ METHOD_HEADER::manager_thread(
                     break; // Consistent, safe to exit
                 }
             }
-        }
+        } //end of locks
     
         //main : look for merge to do
         {
             std::lock_guard<std::mutex> lock(results_mutex);
             // Find two results with the same depth to merge
             while (results.size() > 1) {
+                {
+                    std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+                    std::cerr << "DEBUG Merging results\n";
+                }
                 result_map left = std::move(results.front());
                 results.pop_front();
 
@@ -668,7 +694,47 @@ METHOD_HEADER::manager_thread(
                 cv.notify_all(); // Notify threads about new task
                 //return;
             }
-        }
+            //do the merging of depth_1 results after because want them on top of stack
+            {
+                std::lock_guard<std::mutex> lock(results_depth1_mutex);
+                while (results_depth1.size() > 1) {
+                    {
+                        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+                        std::cerr << "DEBUG Merging d1 results queue size : " << results_depth1.size() << "\n";
+                    }
+                    minmer_set_docid left = std::move(results_depth1.front());
+                    results_depth1.pop_front();
+
+                    minmer_set_docid right = std::move(results_depth1.front());
+                    results_depth1.pop_front();
+
+                    // Add merge task to the stack
+                    {
+                        std::lock_guard<std::mutex> lock(task_stack_mutex);
+                        
+                        task_stack.push( //Function(f, desc)
+                            {
+                                [this, &running_task, left = std::move(left), right = std::move(right), &results, &results_mutex, &cv, &debug_cerr_mutex]() mutable {
+                                    ++running_task;
+                                    result_map merged = this->merge_results(left, right, debug_cerr_mutex);
+                                    {
+                                        std::lock_guard<std::mutex> lock(results_mutex);
+                                        results.push_back(std::move(merged));
+                                    }
+                                    --running_task;
+                                    cv.notify_all(); // Notify manager about new result
+                                },
+                                "merge_results_d1_task" //function desc
+                            }
+                        );
+                    }
+                    cv.notify_all(); // Notify threads about new task
+                } //end while
+            } //end lock results_depth1_mutex
+        } //end lock results_mutex 
+
+        // TODO still miss odd number of files case : one d1 result left, need to merge it with a map
+
 
         //end : sleep until new results
 
@@ -697,8 +763,12 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     // Shared state
     std::stack<Function> task_stack;
     std::mutex task_stack_mutex;
+
+    std::deque<minmer_set_docid> results_depth1;
+    std::mutex results_depth1_mutex;
     std::deque<result_map> results;
     std::mutex results_mutex;
+
     std::condition_variable cv;
     std::atomic<uint32_t> running_task(0);
     std::atomic<bool> all_done(false);
@@ -708,13 +778,13 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     for (const auto& file : m_filenames) {
         task_stack.push( //Function(f, desc)
             {
-                [this, &running_task, file, doc_id, &results, &results_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
+                [this, &running_task, file, doc_id, &results_depth1, &results_depth1_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
                     ++running_task;
-                    result_map result;
+                    minmer_set_docid result = {ankerl::unordered_dense::set<minimizer_t>(), doc_id};
                     this->read_file_task(file, doc_id, result, build_parameters, debug_cerr_mutex);
                     {
-                        std::lock_guard<std::mutex> lock(results_mutex);
-                        results.push_back(std::move(result));
+                        std::lock_guard<std::mutex> lock(results_depth1_mutex);
+                        results_depth1.push_back(std::move(result));
                     }
                     --running_task;
                     cv.notify_all(); // Notify manager that a new result is available
@@ -725,10 +795,14 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
         doc_id++;
     }
 
+    std::cerr << "DEBUG in-between step 1 and 2\n";
+
     // Start manager thread
-    std::thread manager([this, &task_stack, &results, &results_mutex, &task_stack_mutex, &cv, &running_task, &all_done, &debug_cerr_mutex]() {
-        this->manager_thread(task_stack, results, results_mutex, task_stack_mutex, cv, running_task, all_done, debug_cerr_mutex);
+    std::thread manager([this, &task_stack, &task_stack_mutex, &results_depth1, &results_depth1_mutex, &results, &results_mutex, &cv, &running_task, &all_done, &debug_cerr_mutex]() {
+        this->manager_thread(task_stack, task_stack_mutex, results_depth1, results_depth1_mutex, results, results_mutex,  cv, running_task, all_done, debug_cerr_mutex);
     });
+
+    std::cerr << "DEBUG gonna start my bois\n";
 
     // Start worker threads
     std::vector<std::thread> workers;
@@ -747,7 +821,7 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     manager.join();
 
     assert(results.size() == 1);
-    ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>>& minmer_to_colors = results.front();
+    result_map& minmer_to_colors = results.front();
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
     for (const auto& [minmer, colors] : minmer_to_colors) {
         unique_minmers.insert(minmer);
