@@ -551,8 +551,13 @@ result_map
 METHOD_HEADER::merge_results(const minmer_set_docid& left, const minmer_set_docid& right, std::mutex& debug_cerr_mutex) {
     result_map merged;
     // Determine insertion order based on docid
-    for (const auto& key : left.first) merged[key].push_back(left.second);
-    for (const auto& key : right.first) merged[key].push_back(right.second);
+    if (left.second < right.second) {
+        for (const auto& key : left.first) merged[key].push_back(left.second);
+        for (const auto& key : right.first) merged[key].push_back(right.second);
+    } else {
+        for (const auto& key : right.first) merged[key].push_back(right.second);
+        for (const auto& key : left.first) merged[key].push_back(left.second);
+    }
     return merged;
 }
 // Function to merge two results
@@ -567,6 +572,12 @@ METHOD_HEADER::merge_results(const result_map& left, const result_map& right, st
     for (const auto& [key, value] : right) {
         auto& vec = merged[key];
         vec.insert(vec.end(), value.begin(), value.end());
+    }
+    for (auto& [key, vec] : merged) {
+        std::sort(vec.begin(), vec.end()); 
+        //sort at every merges appears to be more efficient than a final merge on every vector at the end
+        //could be replaced by a set ? and make it a vector sorted at the end
+        //vec.erase(std::unique(vec.begin(), vec.end()), vec.end()); -> useless for now because 1file : 1result, might change with future optis
     }
     return merged;
 }
@@ -796,10 +807,7 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     assert(results.size() == 1);
     result_map& minmer_to_colors = results.front();
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
-    
-    for (auto& [minmer, colors] : minmer_to_colors) {
-        std::sort(colors.begin(), colors.end());
-        //std::erase(colors, std::unique(colors.begin(), colors.end()), colors.end()); TODO: will be needed when threads read sections of file
+    for (const auto& [minmer, colors] : minmer_to_colors) {
         unique_minmers.insert(minmer);
     }
 
