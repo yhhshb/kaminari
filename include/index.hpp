@@ -551,13 +551,8 @@ result_map
 METHOD_HEADER::merge_results(const minmer_set_docid& left, const minmer_set_docid& right, std::mutex& debug_cerr_mutex) {
     result_map merged;
     // Determine insertion order based on docid
-    if (left.second < right.second) {
-        for (const auto& key : left.first) merged[key].push_back(left.second);
-        for (const auto& key : right.first) merged[key].push_back(right.second);
-    } else {
-        for (const auto& key : right.first) merged[key].push_back(right.second);
-        for (const auto& key : left.first) merged[key].push_back(left.second);
-    }
+    for (const auto& key : left.first) merged[key].push_back(left.second);
+    for (const auto& key : right.first) merged[key].push_back(right.second);
     return merged;
 }
 // Function to merge two results
@@ -572,10 +567,6 @@ METHOD_HEADER::merge_results(const result_map& left, const result_map& right, st
     for (const auto& [key, value] : right) {
         auto& vec = merged[key];
         vec.insert(vec.end(), value.begin(), value.end());
-    }
-    for (auto& [key, vec] : merged) {
-        std::sort(vec.begin(), vec.end()); //could be replaced by a set ? and make it a vector sorted at the end
-        //vec.erase(std::unique(vec.begin(), vec.end()), vec.end()); -> useless for now because 1file : 1result, might change with future optis
     }
     return merged;
 }
@@ -781,14 +772,10 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
         doc_id++;
     }
 
-    std::cerr << "DEBUG in-between step 1 and 2\n";
-
     // Start manager thread
     std::thread manager([this, &task_stack, &task_stack_mutex, &results_depth1, &results_depth1_mutex, &results, &results_mutex, &cv, &running_task, &all_done, &debug_cerr_mutex]() {
         this->manager_thread(task_stack, task_stack_mutex, results_depth1, results_depth1_mutex, results, results_mutex,  cv, running_task, all_done, debug_cerr_mutex);
     });
-
-    std::cerr << "DEBUG gonna start my bois\n";
 
     // Start worker threads
     std::vector<std::thread> workers;
@@ -809,7 +796,10 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     assert(results.size() == 1);
     result_map& minmer_to_colors = results.front();
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
-    for (const auto& [minmer, colors] : minmer_to_colors) {
+    
+    for (auto& [minmer, colors] : minmer_to_colors) {
+        std::sort(colors.begin(), colors.end());
+        //std::erase(colors, std::unique(colors.begin(), colors.end()), colors.end()); TODO: will be needed when threads read sections of file
         unique_minmers.insert(minmer);
     }
 
