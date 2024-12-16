@@ -27,6 +27,18 @@ std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& 
     return filename.str();
 }
 
+std::string get_tmp_filename(const std::string& prefix, uint16_t batch_id, uint16_t depth, std::thread::id tid)
+{
+    std::ostringstream oss;
+    oss << tid;  // Convert thread ID to a string representation
+    std::string thread_id_str = oss.str();
+
+    std::stringstream filename;
+    filename 
+    << prefix << "_" << batch_id << "_" << depth << "_" << thread_id_str << ".bin";
+    return filename.str();
+}
+
 uint64_t getTotalVirtualMem() {
     struct sysinfo memInfo;
     sysinfo (&memInfo);

@@ -35,8 +35,16 @@ struct scored {
 };
 
 typedef scored<uint32_t> scored_id;
-typedef ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>> result_map;
-typedef std::pair<ankerl::unordered_dense::set<uint64_t>, uint32_t> minmer_set_docid;
+
+typedef emem::external_memory_vector<uint64_t> emem_minmers;
+struct Depth1Result {
+    emem_minmers minmers;
+    uint32_t docid;
+};
+
+typedef emem::external_memory_vector<std::pair<uint64_t, std::vector<uint32_t>>, false> depthn_result;
+
+typedef emem::external_memory_vector<std::pair<std::vector<uint32_t>, uint64_t>> colors_to_minmer;
 
 struct Function {
     std::function<void()> f; // Actual function
@@ -104,21 +112,73 @@ class index
             std::atomic<uint32_t>& running_task,
             std::atomic<bool>& all_done,
             std::mutex& debug_cerr_mutex);
-        void manager_thread(
+
+        //merge 2 or 3 (case odd number) results post parsing files
+        void merge_results_task(const Depth1Result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
+        void merge_results_task(const Depth1Result& one, const Depth1Result& two, Depth1Result& three, depthn_result& result, std::mutex& debug_cerr_mutex);
+        //merge 2 or 3 (case odd number) results 
+        void merge_results_task(const depthn_result& left, const depthn_result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
+        void merge_results_task(const depthn_result& one, const depthn_result& two, const depthn_result& three, depthn_result& result, std::mutex& debug_cerr_mutex);
+        //merge depth1 result with depthn result, special case (unique file in last batch)
+        void merge_results_task(const depthn_result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
+        void merge_results_task(const depthn_result& left, const depthn_result& right, colors_to_minmer& final_result, std::mutex& debug_cerr_mutex);
+
+        void read_file_task(const std::string& file, uint32_t doc_id, Depth1Result& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
+
+        void init_batch(
             std::stack<Function>& task_stack,
             std::mutex& task_stack_mutex,
-            std::deque<minmer_set_docid>& results_depth1,
-            std::mutex& results_depth1_mutex,
-            std::deque<result_map>& results,
-            std::mutex& results_mutex,
+            std::deque<Depth1Result>& d1_results_storage,
+            std::mutex& d1_results_storage_mutex,
+            uint32_t start,
+            uint32_t end,
+            std::atomic<uint32_t>& running_task,
+            std::condition_variable& cv,
+            const build::options_t& build_parameters,
+            std::mutex& debug_cerr_mutex);
+        void run_batch(
+            std::uint16_t batch_id,
+            std::stack<Function>& task_stack,
+            std::mutex& task_stack_mutex,
+            std::deque<Depth1Result>& d1_results_storage,
+            std::mutex& d1_results_storage_mutex,
+            std::deque<depthn_result>& results_storage,
+            std::atomic<uint32_t>& running_task,
+            std::condition_variable& cv,
+            const build::options_t& build_parameters,
+            std::mutex& debug_cerr_mutex);
+        void process_files(
+            std::stack<Function>& task_stack,
+            std::mutex& task_stack_mutex,
+            std::deque<depthn_result>& results_storage,
             std::condition_variable& cv,
             std::atomic<uint32_t>& running_task,
-            std::atomic<bool>& all_done,
-            std::mutex& debug_cerr_mutex);
-        result_map merge_results(const result_map& left, const result_map& right, std::mutex& debug_cerr_mutex);
-        result_map merge_results(const minmer_set_docid& left, const minmer_set_docid& right, std::mutex& debug_cerr_mutex);
-        // Function to read a file
-        void read_file_task(const std::string& file, uint32_t doc_id, minmer_set_docid& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
+            std::mutex& debug_cerr_mutex,
+            const build::options_t& build_parameters);
+
+        void run_batch_tree(
+            uint16_t batch_id,
+            uint32_t batch_size,
+            std::stack<Function>& task_stack,
+            std::mutex& task_stack_mutex,
+            std::deque<depthn_result>& results_storage,
+            std::mutex& results_storage_mutex,
+            std::condition_variable& cv,
+            std::atomic<uint32_t>& running_task,
+            bool final_batch,
+            colors_to_minmer& final_result,
+            const build::options_t& build_parameters,
+            std::mutex& debug_cerr_mutex); 
+        void process_tree(
+            std::stack<Function>& task_stack,
+            std::mutex& task_stack_mutex,
+            std::deque<depthn_result>& results_storage,
+            std::mutex& results_storage_mutex,
+            std::condition_variable& cv,
+            std::atomic<uint32_t>& running_task,
+            colors_to_minmer& final_result,
+            std::mutex& debug_cerr_mutex,
+            const build::options_t& build_parameters);
 
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -222,277 +282,6 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
 }
 
 
-CLASS_HEADER
-void
-METHOD_HEADER::build(const build::options_t& build_parameters)
-{
-    std::size_t run_id = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-
-    typedef std::pair<minimizer_t, color_t> mpc_t;
-    emem::external_memory_vector<mpc_t> tmp_sorted_storage(
-        build_parameters.max_ram * constants::GB, 
-        build_parameters.tmp_dir, 
-        utils::get_tmp_filename("", "minimizer_unitig_id", run_id)
-    );
-
-    std::unordered_map<uint64_t, std::vector<color_t>> kmer_color_check;
-
-
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    //STEP 1 : READING FILES ===================================================
-    {
-        if (build_parameters.verbose > 0) std::cerr << "Step 1: reading files\n";
-
-        std::cerr << "DEBUG Start reading files\n";
-        utils::printRAMInfo();
-
-        float fraction = 0.1;
-        color_t id = 0;
-        std::size_t total_kmers = 0;
-        std::size_t total_mmers = 0;
-        std::size_t total_minimizers = 0;
-        gzFile fp = nullptr;
-        kseq_t* seq = nullptr;
-        std::vector<::minimizer::record_t> mms_buffer;
-        for (auto filename : m_filenames) {
-            if ((fp = gzopen(filename.c_str(), "r")) == NULL)
-                throw std::runtime_error("Unable to open input file " + filename);
-            seq = kseq_init(fp);
-            while (kseq_read(seq) >= 0) {
-                std::size_t contig_mmer_count;
-                auto contig_kmer_count = ::minimizer::from_string<hash64>(
-                    seq->seq.s, 
-                    seq->seq.l, 
-                    build_parameters.k, 
-                    build_parameters.m, 
-                    build_parameters.seed, 
-                    build_parameters.canonical,
-                    contig_mmer_count,
-                    mms_buffer
-                );
-                total_kmers += contig_kmer_count;
-                total_mmers += contig_mmer_count;
-                total_minimizers += mms_buffer.size();
-                if (build_parameters.verbose > 4) {
-                    std::cerr << "\tRead contig:\n" 
-                              << "\t\t" << contig_kmer_count << " k-mers\n"
-                              << "\t\t" << contig_mmer_count << " m-mers\n"
-                              << "\t\t" << mms_buffer.size() << " minimizers\n";
-                }
-                // remove duplicates and output to tmp file on disk
-                std::vector<minimizer_t> minimizers;
-                for (auto r : mms_buffer) {
-                    minimizers.push_back(r.itself);
-                }
-                std::sort(minimizers.begin(), minimizers.end());
-                auto last = std::unique(minimizers.begin(), minimizers.end());
-                for (auto itr = minimizers.begin(); itr != last; ++itr) {
-                    tmp_sorted_storage.push_back(std::make_pair(*itr, id));
-                }
-                mms_buffer.clear();
-
-                if (build_parameters.check) {
-                    std::vector<::minimizer::record_t> kmer_buffer;
-                    std::size_t dummy;
-                    [[maybe_unused]] auto kmc = ::minimizer::from_string<hash64>(
-                        seq->seq.s,
-                        seq->seq.l,
-                        build_parameters.k,
-                        build_parameters.k,
-                        static_cast<uint64_t>(0),
-                        false, // minimizers are canonical or not, kmers are kept as they are for checking
-                        dummy,
-                        kmer_buffer
-                    );
-                    // auto last = std::unique(kmer_buffer.begin(), kmer_buffer.end());
-                    for (auto itr = kmer_buffer.begin(); itr != kmer_buffer.end(); ++itr) {
-                        if (kmer_color_check.find(itr->itself) == kmer_color_check.end()) {
-                            kmer_color_check.emplace(itr->itself, std::vector<color_t> {id});
-                        } else if (kmer_color_check[itr->itself].back() != id) { // this takes care of duplicates
-                            kmer_color_check[itr->itself].push_back(id);
-                        }
-                    }
-                }
-            }
-            if (seq) kseq_destroy(seq);
-            gzclose(fp);
-            fp = nullptr;
-            seq = nullptr;
-            ++id;
-            /**/
-            if (build_parameters.verbose > 1) {
-                if (id >= m_filenames.size() * fraction) {
-                    std::cerr << "\tProcessed " << fraction * 100 << "\% of input files\n";
-                    std::cerr << "\t\t(minimizer, color) pairs: " << tmp_sorted_storage.size() << "\n";
-                    fraction += 0.1;
-                }
-            }
-        }
-
-        std::cout << "DEBUG Time for reading files: " 
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - start_time
-                 ).count() 
-              << " milliseconds\n";
-
-        std::cerr << "DEBUG End reading files\n";
-        std::cerr << "size of emem1 : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
-        utils::printRAMInfo();
-
-        if (build_parameters.verbose > 0) {
-            std::cerr << "\ttotal k-mers: " << total_kmers << "\n";
-            std::cerr << "\ttotal m-mers: " << total_mmers << "\n";
-            std::cerr << "\ttotal minimizers (with repetitions): " << total_minimizers << "\n";
-        }
-    }
-
-    typedef std::pair<std::vector<color_t>, minimizer_t> cc_mm_t;
-    emem::external_memory_vector<cc_mm_t> sorted_color_lists(
-        build_parameters.max_ram * constants::GB, 
-        build_parameters.tmp_dir, 
-        utils::get_tmp_filename("", "color_minimizer_list", run_id)
-    );
-
-    std::cerr << "DEBUG in-between step and 2, defined(and reserved buffer) emem2\n";
-    utils::printRAMInfo();
-
-
-    //STEP 2 : AGGREGATING COLORS ==============================================
-    { 
-        // aggregate colors into lists for each minimizer (and build the MPHF while doing so)
-        if (build_parameters.verbose > 0) std::cerr << "Step 2: aggregating colors\n";
-        start_time = std::chrono::high_resolution_clock::now();
-        /*emem::external_memory_vector<minimizer_t, false> unique_minimizers(
-            build_parameters.max_ram * constants::GB, 
-            build_parameters.tmp_dir, 
-            utils::get_tmp_filename("", "unique_minimizers", run_id)
-        );*/
-        std::vector<minimizer_t> unique_minimizers; //TODO pthash phobic dense_partitonned needs random access to the keys for parallelism. emem random access ? for now vector but might overflow RAM (347M minimisers for 60human docs -> 1.39GB RAM)
-        
-        auto itr = tmp_sorted_storage.cbegin();
-        while (itr != tmp_sorted_storage.cend()) { // build list of colors for each minimizer
-            auto current = (*itr).first;
-            std::vector<color_t> ids;
-            while (itr != tmp_sorted_storage.cend() and (*itr).first == current) {
-                ids.push_back((*itr).second);
-                ++itr;
-            }
-            auto last = std::unique(ids.begin(), ids.end()); //do we expect any duplicates here? -> no because we already deduplicated the minimizers for each file, TODO: choice between deduplicating minimisers in one file here or before
-            ids.erase(last, ids.end());
-            sorted_color_lists.push_back(std::make_pair(std::move(ids), current)); // save ([ids], minimizer) to disk
-            unique_minimizers.push_back(current);
-        }
-
-        std::cout << "DEBUG Time for aggregating colors: " 
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - start_time
-                 ).count() 
-              << " milliseconds\n";
-
-        std::cerr << "DEBUG End aggregating colors\n";
-        std::cerr << "size of emem1 (should be deleted now) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
-        std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
-        std::cerr << "size of unique_minmers : " << unique_minimizers.size()*sizeof(minimizer_t) << "\n";
-        utils::printRAMInfo();
-
-
-    //STEP 3 : BUILDING MPHF ===================================================
-        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minimizers.size() << " minimizers\n";
-        start_time = std::chrono::high_resolution_clock::now();
-        //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
-        int backup, redirect;
-        fflush(stdout);
-        backup = dup(1);
-        redirect = open("/dev/null", O_WRONLY);
-        dup2(redirect, 1);
-        close(redirect);
-
-        //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
-        hf.build_in_internal_memory(unique_minimizers.begin(), unique_minimizers.size(), get_pthash_options(build_parameters));
-
-        fflush(stdout);
-        dup2(backup, 1);
-        close(backup);
-        assert(hf.num_keys() == unique_minimizers.size());
-
-        std::cout << "DEBUG Time for MPHF build: " 
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - start_time
-                 ).count() 
-              << " milliseconds\n";
-
-        std::cerr << "DEBUG End building MPHF\n";
-        std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
-        std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
-        std::cerr << "size of unique_minmers : " << unique_minimizers.size()*sizeof(minimizer_t) << "\n";
-        std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
-        utils::printRAMInfo();
-    }
-
-    std::cerr << "DEBUG in-between step 3 and 4\n";
-    std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
-    std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
-    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
-    utils::printRAMInfo();
-
-    //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
-    {
-        if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
-        start_time = std::chrono::high_resolution_clock::now();
-        
-        typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
-
-        if (build_parameters.check) {
-            if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
-            for (std::size_t i = 0; i < hf.num_keys(); ++i) 
-                m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
-        }
-        
-
-        uint32_t cid = 0;
-        auto itr = sorted_color_lists.cbegin();
-        while(itr != sorted_color_lists.cend()) {
-            auto current_color = (*itr).first;
-            cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
-            while(itr != sorted_color_lists.cend() and (*itr).first == current_color) {
-                auto minimizer = (*itr).second;
-                auto mp_idx = hf(minimizer);
-                // std::cerr << minimizer << " -> " << mp_idx << "\n";
-                if (build_parameters.check) { //super super slow but how to access in builder ?
-                    pthash::compact_vector check_m_map;
-                    m_map_builder.build(check_m_map);
-                    if (check_m_map[mp_idx] != static_cast<uint64_t>((1 << m_map_builder.width()) - 1)) throw std::runtime_error("[check fail] reassigning id of unique minimizer (the minimizer is not unique)");
-                }
-                m_map_builder.set(mp_idx, cid);
-                ++itr;
-            }
-            ++cid;
-        }
-        cbuild.build(m_ccs);
-        m_map_builder.build(m_map);
-        //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
-    }
-
-    std::cout << "DEBUG Time for dedup + mapping: " 
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::high_resolution_clock::now() - start_time
-                 ).count() 
-              << " milliseconds\n";
-
-    std::cerr << "DEBUG end mapping\n";
-    std::cerr << "size of emem1 (should be deleted already) : " << tmp_sorted_storage.size()*sizeof(mpc_t) << "\n";
-    std::cerr << "size of emem2 : " << sorted_color_lists.size()*sizeof(cc_mm_t) << "\n";
-    std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
-    std::cerr << "check mem breakdown for thr rest \n";
-    utils::printRAMInfo();
-
-    if (build_parameters.verbose > 0) {
-        std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
-        std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
-    }
-}
 
 /*
 Build 2 is a parallel version of build, using a thread pool to read files and merge results.
@@ -501,7 +290,7 @@ Build 2 is a parallel version of build, using a thread pool to read files and me
 // Function to read a file
 CLASS_HEADER
 void 
-METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, minmer_set_docid& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
+METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, Depth1Result& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
     std::size_t total_kmers = 0;
     std::size_t total_mmers = 0;
     std::size_t total_minimizers = 0;
@@ -527,15 +316,16 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, minmer_s
         total_mmers += contig_mmer_count;
         total_minimizers += mms_buffer.size();
         if (build_parameters.verbose > 4) {
+            std::lock_guard<std::mutex> lock(debug_cerr_mutex);
             std::cerr << "\tRead contig:\n" 
                         << "\t\t" << contig_kmer_count << " k-mers\n"
                         << "\t\t" << contig_mmer_count << " m-mers\n"
                         << "\t\t" << mms_buffer.size() << " minimizers\n";
         }
-        // remove duplicates and output to tmp file on disk
+        // duplicates removed during merge
         std::vector<minimizer_t> minimizers;
         for (auto r : mms_buffer) {
-            result.first.insert(r.itself);
+            result.minmers.push_back(r.itself);
         }
         mms_buffer.clear();
     }
@@ -543,44 +333,290 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, minmer_s
     gzclose(fp);
     fp = nullptr;
     seq = nullptr;
+    result.docid = doc_id;
 }
 
-// Function to merge two depth_1 results
+// Function to merge two or 3 depth_1 results
 CLASS_HEADER
-result_map
-METHOD_HEADER::merge_results(const minmer_set_docid& left, const minmer_set_docid& right, std::mutex& debug_cerr_mutex) {
-    result_map merged;
-    // Determine insertion order based on docid
-    if (left.second < right.second) {
-        for (const auto& key : left.first) merged[key].push_back(left.second);
-        for (const auto& key : right.first) merged[key].push_back(right.second);
-    } else {
-        for (const auto& key : right.first) merged[key].push_back(right.second);
-        for (const auto& key : left.first) merged[key].push_back(left.second);
+void
+METHOD_HEADER::merge_results_task(const Depth1Result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex) {
+    // Determine insertion order based on docid value
+    const Depth1Result* small = &left;
+    const Depth1Result* big = &right;
+    if (left.docid > right.docid) {
+        small = &right;
+        big = &left;
     }
-    return merged;
+
+    auto small_itr = small->minmers.cbegin();  
+    auto big_itr = big->minmers.cbegin(); 
+    uint64_t last = 1ULL<<63;
+    //used for deduplicating, first ensuring last isnt equal to first value considered
+
+    //read both vectors
+    while (small_itr != small->minmers.cend() && big_itr != big->minmers.cend()) {
+        if (*small_itr < *big_itr) {
+            if (*small_itr != last) {
+                result.push_back(std::make_pair(*small_itr, std::vector<uint32_t> {small->docid}));
+                last = *small_itr;
+            }
+            ++small_itr;
+        } else if (*small_itr > *big_itr) {
+            if (*big_itr != last) {
+                result.push_back(std::make_pair(*big_itr, std::vector<uint32_t> {big->docid}));
+                last = *big_itr;
+            }
+            ++big_itr;
+        } else {
+            if (*small_itr != last) {
+                result.push_back(std::make_pair(*small_itr, std::vector<uint32_t> {small->docid, big->docid}));
+                last = *small_itr;
+            }
+            ++small_itr;
+            ++big_itr;
+        }
+    } 
+
+    //read remaining non-empty vector
+    while (small_itr != small->minmers.cend()) {
+        if (*small_itr != last) {
+            result.push_back(std::make_pair(*small_itr, std::vector<uint32_t> {small->docid}));
+            last = *small_itr;
+        }
+        ++small_itr;
+    }
+
+    while (big_itr != big->minmers.cend()) {
+        if (*big_itr != last) {
+            result.push_back(std::make_pair(*big_itr, std::vector<uint32_t> {big->docid}));
+            last = *big_itr;
+        }
+        ++big_itr;
+    }
 }
-// Function to merge two results
 CLASS_HEADER
-result_map
-METHOD_HEADER::merge_results(const result_map& left, const result_map& right, std::mutex& debug_cerr_mutex) {
-    result_map merged;
-    for (const auto& [key, value] : left) {
-        auto& vec = merged[key];
-        vec.insert(vec.end(), value.begin(), value.end());
+void
+METHOD_HEADER::merge_results_task(const Depth1Result& one, const Depth1Result& two, Depth1Result& three, depthn_result& result, std::mutex& debug_cerr_mutex) {
+    const Depth1Result* first = &one;
+    const Depth1Result* second = &two;
+    const Depth1Result* third = &three;
+
+    if (first->docid > second->docid) std::swap(first, second);
+    if (first->docid > third->docid) std::swap(first, third);
+    if (second->docid > third->docid) std::swap(second, third);
+
+    auto first_itr = first->minmers.cbegin();
+    auto second_itr = second->minmers.cbegin();
+    auto third_itr = third->minmers.cbegin();
+
+    uint64_t last = 1ULL<<63; // Used for deduplication; initialize to an impossible value
+
+    // Read all three vectors
+    while (first_itr != first->minmers.cend() || second_itr != second->minmers.cend() || third_itr != third->minmers.cend()) {
+        uint64_t min_value = 1ULL<<63;
+
+        //min between three
+        if (first_itr != first->minmers.cend()) min_value = std::min(min_value, *first_itr);
+        if (second_itr != second->minmers.cend()) min_value = std::min(min_value, *second_itr);
+        if (third_itr != third->minmers.cend()) min_value = std::min(min_value, *third_itr);
+
+        std::vector<uint32_t> doc_ids;
+
+        //collect docids associated with min value
+        if (first_itr != first->minmers.cend() && *first_itr == min_value) {
+            doc_ids.push_back(first->docid);
+            ++first_itr;
+        }
+        if (second_itr != second->minmers.cend() && *second_itr == min_value) {
+            doc_ids.push_back(second->docid);
+            ++second_itr;
+        }
+        if (third_itr != third->minmers.cend() && *third_itr == min_value) {
+            doc_ids.push_back(third->docid);
+            ++third_itr;
+        }
+        // deduplicate if needed
+        if (min_value != last) {
+            result.push_back(std::make_pair(min_value, std::move(doc_ids)));
+            last = min_value;
+        }
     }
-    for (const auto& [key, value] : right) {
-        auto& vec = merged[key];
-        vec.insert(vec.end(), value.begin(), value.end());
-    }
-    for (auto& [key, vec] : merged) {
-        std::sort(vec.begin(), vec.end()); 
-        //sort at every merges appears to be more efficient than a final merge on every vector at the end
-        //could be replaced by a set ? and make it a vector sorted at the end
-        //vec.erase(std::unique(vec.begin(), vec.end()), vec.end()); -> useless for now because 1file : 1result, might change with future optis
-    }
-    return merged;
 }
+
+//special case of merging depth1 result with depthn result (needed when 1 file in last batch)
+CLASS_HEADER
+void
+METHOD_HEADER::merge_results_task(const depthn_result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex) {
+    auto left_itr = left.cbegin();     // depthn_result is a deque of <vector<uint32_t>, uint64_t>
+    auto right_itr = right.minmers.cbegin();  // Depth1Result's `first` is a vector of uint64_t
+
+    uint64_t right_docid = right.docid;   // Depth1Result's `second` is the document ID
+    uint64_t last = 1ULL<<63; // Deduplication marker
+
+    // Merge logic
+    while (right_itr != right.minmers.cend() || left_itr != left.cend()) {
+        uint64_t min_value = 1ULL<<63;
+        if (left_itr != left.cend()) min_value = (*left_itr).first;
+        if (right_itr != right.minmers.cend() && *right_itr < min_value) min_value = *right_itr;
+        
+        std::vector<uint32_t> merged_docids;
+
+        // Add from left if it matches the smallest value
+        if (left_itr != left.cend() && (*left_itr).first == min_value) {
+            merged_docids.insert(merged_docids.end(), (*left_itr).second.begin(), (*left_itr).second.end());
+            ++left_itr;
+        }
+
+        // Add from right if it matches the smallest value
+        if (right_itr != right.minmers.cend() && *right_itr == min_value) {
+            merged_docids.push_back(right_docid);
+            ++right_itr;
+        }
+
+        // Deduplicate and insert into the result
+        if (min_value != last) {
+            result.push_back(std::make_pair(min_value, std::move(merged_docids)));
+            last = min_value;
+        }
+    }
+}
+
+
+// Functions to merge two or 3 Depth n results
+CLASS_HEADER
+void
+METHOD_HEADER::merge_results_task(const depthn_result& left, const depthn_result& right, depthn_result& result, std::mutex& debug_cerr_mutex) {
+    // Determine insertion order based on docid value
+    const depthn_result* small = &left;
+    const depthn_result* big = &right;
+    //check 1st value of each first color
+    if ((*left.cbegin()).second[0] > (*right.cbegin()).second[0]) {
+        small = &right;
+        big = &left;
+    }
+
+    // Merge the two results
+    auto small_itr = small->cbegin();  
+    auto big_itr = big->cbegin(); 
+
+    while (small_itr != small->cend() && big_itr != big->cend()) {
+        if ((*small_itr).first < (*big_itr).first) {
+            result.push_back(*small_itr);
+            ++small_itr;
+        } else if ((*small_itr).first > (*big_itr).first) {
+            result.push_back(*big_itr);
+            ++big_itr;
+        } else {
+            std::vector<uint32_t> merged_docids = (*small_itr).second;
+            merged_docids.insert(merged_docids.end(), (*big_itr).second.begin(), (*big_itr).second.end()); // merging by concatenating
+            result.push_back(std::make_pair((*small_itr).first, std::move(merged_docids))); // Add to result
+            ++small_itr;
+            ++big_itr;
+        }
+    }
+
+    while (small_itr != small->cend()) {
+        result.push_back(*small_itr);
+        ++small_itr;
+    }
+    while (big_itr != big->cend()) {
+        result.push_back(*big_itr);
+        ++big_itr;
+    }
+}
+CLASS_HEADER
+void
+METHOD_HEADER::merge_results_task(const depthn_result& one, const depthn_result& two, const depthn_result& three, depthn_result& result, std::mutex& debug_cerr_mutex) {
+    // Determine insertion order based on docid value
+    const depthn_result* first = &one;
+    const depthn_result* second = &two;
+    const depthn_result* third = &three;
+
+    //check order based on first value of first color
+    if ((*second->cbegin()).second[0] < (*first->cbegin()).second[0]) {
+        std::swap(first, second);
+    }
+    if ((*third->cbegin()).second[0] < (*first->cbegin()).second[0]) {
+        std::swap(first, third);
+    }
+    if ((*third->cbegin()).second[0] < (*second->cbegin()).second[0]) {
+        std::swap(second, third);
+    }
+
+    // Iterators for the three inputs
+    auto itr1 = first->cbegin();
+    auto itr2 = second->cbegin();
+    auto itr3 = third->cbegin();
+
+    // Merge the three results
+    while (itr1 != first->cend() || itr2 != second->cend() || itr3 != third->cend()) {
+        uint64_t min_value = 1ULL<<63;
+        if (itr1 != first->cend()) min_value = (*itr1).first;
+        if (itr2 != second->cend() && (*itr2).first < min_value) min_value = (*itr2).first;
+        if (itr3 != third->cend() && (*itr3).first < min_value) min_value = (*itr3).first;
+
+        std::vector<uint32_t> merged_docids;
+
+        if (itr1 != first->cend() && (*itr1).first == min_value) {
+            merged_docids.insert(merged_docids.end(), (*itr1).second.begin(), (*itr1).second.end());
+            ++itr1;
+        }
+        if (itr2 != second->cend() && (*itr2).first == min_value) {
+            merged_docids.insert(merged_docids.end(), (*itr2).second.begin(), (*itr2).second.end());
+            ++itr2;
+        }
+        if (itr3 != third->cend() && (*itr3).first == min_value) {
+            merged_docids.insert(merged_docids.end(), (*itr3).second.begin(), (*itr3).second.end());
+            ++itr3;
+        }
+
+        // Add the merged result to the output
+        result.push_back(std::make_pair(min_value, std::move(merged_docids)));
+    }
+}
+
+//function to merge 2 depthn results into final result
+CLASS_HEADER
+void
+METHOD_HEADER::merge_results_task(const depthn_result& left, const depthn_result& right, colors_to_minmer& final_result, std::mutex& debug_cerr_mutex) {
+    // Determine insertion order based on docid value
+    const depthn_result* small = &left;
+    const depthn_result* big = &right;
+    //check 1st value of each first color
+    if ((*left.cbegin()).second[0] > (*right.cbegin()).second[0]) {
+        small = &right;
+        big = &left;
+    }
+
+    // Merge the two results
+    auto small_itr = small->cbegin();  
+    auto big_itr = big->cbegin(); 
+
+    while (small_itr != small->cend() && big_itr != big->cend()) {
+        if ((*small_itr).first < (*big_itr).first) {
+            final_result.push_back(std::make_pair((*small_itr).second, (*small_itr).first));
+            ++small_itr;
+        } else if ((*small_itr).first > (*big_itr).first) {
+            final_result.push_back(std::make_pair((*big_itr).second, (*big_itr).first));
+            ++big_itr;
+        } else {
+            std::vector<uint32_t> merged_docids = (*small_itr).second;
+            merged_docids.insert(merged_docids.end(), (*big_itr).second.begin(), (*big_itr).second.end()); // merging by concatenating
+            final_result.push_back(std::make_pair(std::move(merged_docids), (*small_itr).first)); // Add to final_result
+            ++small_itr;
+            ++big_itr;
+        }
+    }
+    while (small_itr != small->cend()) {
+        final_result.push_back(std::make_pair((*small_itr).second, (*small_itr).first));
+        ++small_itr;
+    }
+    while (big_itr != big->cend()) {
+        final_result.push_back(std::make_pair((*big_itr).second, (*big_itr).first));
+        ++big_itr;
+    }
+}
+
 
 // Worker thread function
 CLASS_HEADER
@@ -606,209 +642,658 @@ METHOD_HEADER::worker_thread(
             }
 
             if (!task_stack.empty()) {
+                running_task++; //already one in task but security (2 tasks running for each task)
                 task = std::move(task_stack.top());
                 task_stack.pop();
             }
         }
         if (task.f) {
             task.f();
+            running_task--;
+            cv.notify_all();
         }
     }
 }
 
 
-// Manager thread function
 CLASS_HEADER
 void
-METHOD_HEADER::manager_thread(
+METHOD_HEADER::init_batch(
     std::stack<Function>& task_stack,
     std::mutex& task_stack_mutex,
-    std::deque<minmer_set_docid>& results_depth1,
-    std::mutex& results_depth1_mutex,
-    std::deque<result_map>& results,
-    std::mutex& results_mutex,
-    std::condition_variable& cv,
+    std::deque<Depth1Result>& d1_results_storage,
+    std::mutex& d1_results_storage_mutex,
+    uint32_t start,
+    uint32_t end,
     std::atomic<uint32_t>& running_task,
-    std::atomic<bool>& all_done,
+    std::condition_variable& cv,
+    const build::options_t& build_parameters,
     std::mutex& debug_cerr_mutex)
 {
-    while (true) {
-        {
-            std::lock_guard<std::mutex> resd1_lock(results_depth1_mutex);
-            std::lock_guard<std::mutex> res_lock(results_mutex);
-            std::lock_guard<std::mutex> stack_lock(task_stack_mutex);
-            if (task_stack.empty() && running_task.load() == 0 && results_depth1.size() == 0 && results.size() == 1) { 
-                //need no more tasks to do, no running tasks, 1 result left to get out
-                all_done.store(true);
-                cv.notify_all();
-
-                // Double-check the state after setting all_done
-                std::this_thread::sleep_for(std::chrono::milliseconds(250));
-                if (!task_stack.empty() || running_task.load() > 0) {
-                    all_done.store(false); // Revert if inconsistent
-                } else {
-                    break; // Consistent, safe to exit
-                }
-            }
-        } //end of locks
-    
-        //main : look for merge to do
-        {
-            std::lock_guard<std::mutex> lock(results_mutex);
-            // Find two results with the same depth to merge
-            while (results.size() > 1) {
-                result_map left = std::move(results.front());
-                results.pop_front();
-
-                result_map right = std::move(results.front());
-                results.pop_front();
-
-                // Add merge task to the stack
+    uint64_t allocated_ram = build_parameters.max_ram * constants::GB / 2 / (end - start);
+    {
+        std::lock_guard<std::mutex> lock(task_stack_mutex);
+        for (uint32_t docid = start; docid < end; ++docid) {
+            //create read_file_task for each file of batch
+            task_stack.push( //Function(f, desc)
                 {
-                    std::lock_guard<std::mutex> lock(task_stack_mutex);
-                    
-                    task_stack.push( //Function(f, desc)
-                        {
-                            [this, &running_task, left = std::move(left), right = std::move(right), &results, &results_mutex, &cv, &debug_cerr_mutex]() mutable {
-                                ++running_task;
-                                result_map merged = this->merge_results(left, right, debug_cerr_mutex);
-                                {
-                                    std::lock_guard<std::mutex> lock(results_mutex);
-                                    results.push_back(std::move(merged));
-                                }
-                                --running_task;
-                                cv.notify_all(); // Notify manager about new result
-                            },
-                            "merge_results_task" //function desc
-                        }
-                    );
-                }
-                cv.notify_all(); // Notify threads about new task
-                //return;
-            }
-            //do the merging of depth_1 results after because want them on top of stack
-            {
-                std::lock_guard<std::mutex> lock(results_depth1_mutex);
-                while (results_depth1.size() > 1) {
-                    minmer_set_docid left = std::move(results_depth1.front());
-                    results_depth1.pop_front();
-
-                    minmer_set_docid right = std::move(results_depth1.front());
-                    results_depth1.pop_front();
-
-                    // Add merge task to the stack
-                    {
-                        std::lock_guard<std::mutex> lock(task_stack_mutex);
-                        
-                        task_stack.push( //Function(f, desc)
+                    [this, &start, &allocated_ram, docid, &d1_results_storage, &d1_results_storage_mutex, &running_task, &cv, &build_parameters, &debug_cerr_mutex]() {
+                        ++running_task;
+                        Depth1Result result(
                             {
-                                [this, &running_task, left = std::move(left), right = std::move(right), &results, &results_mutex, &cv, &debug_cerr_mutex]() mutable {
-                                    ++running_task;
-                                    result_map merged = this->merge_results(left, right, debug_cerr_mutex);
-                                    {
-                                        std::lock_guard<std::mutex> lock(results_mutex);
-                                        results.push_back(std::move(merged));
-                                    }
-                                    --running_task;
-                                    cv.notify_all(); // Notify manager about new result
-                                },
-                                "merge_results_d1_task" //function desc
+                                emem_minmers(
+                                    allocated_ram, 
+                                    build_parameters.tmp_dir, 
+                                    utils::get_tmp_filename("minmers", start, 0, std::this_thread::get_id())),
+                                docid
                             }
                         );
+                                               
+                        read_file_task(m_filenames[docid], docid, result, build_parameters, debug_cerr_mutex);
+                        {
+                            std::lock_guard<std::mutex> lock(d1_results_storage_mutex);
+                            d1_results_storage.push_back(std::move(result));
+                        }
+
+                        --running_task;
+                        cv.notify_all();
+                    },
+                    "read_file_task" //function desc
+                }
+            );
+        }
+    } //end lock on stack
+    cv.notify_all(); // Notify threads about new tasks
+}
+
+
+CLASS_HEADER
+void
+METHOD_HEADER::run_batch(
+    uint16_t batch_id,
+    std::stack<Function>& task_stack,
+    std::mutex& task_stack_mutex,
+    std::deque<Depth1Result>& d1_results_storage,
+    std::mutex& d1_results_storage_mutex,
+    std::deque<depthn_result>& results_storage,
+    std::atomic<uint32_t>& running_task,
+    std::condition_variable& cv,
+    const build::options_t& build_parameters,
+    std::mutex& debug_cerr_mutex)
+{
+    std::deque<depthn_result> tmp_results_storage;
+    std::mutex tmp_results_storage_mutex;
+    uint16_t depth = 1;
+    uint64_t ram_for_1_depth = build_parameters.max_ram * constants::GB / 2;
+    uint64_t allocated_ram;
+    uint32_t nb_d1 = d1_results_storage.size();
+
+    if (nb_d1 == 1 && m_filenames.size() == 1) {
+        std::cerr << "TODO: handle case 1 file in index, likely going to crash\n";
+    }
+    //1ST STEP : PROCESS DEPTH 1 RESULTS
+    allocated_ram = (nb_d1 == 1) ? ram_for_1_depth : ram_for_1_depth / (nb_d1/2); //divide by the nb of results in next depth
+
+    if (nb_d1 % 2 == 1) {
+        //odd number of files in batch, possibly last batch (if even number of threads)
+        if (nb_d1 == 1 && m_filenames.size() > 1) {
+            //case last batch contains only one file, merge it with last batch result
+            depthn_result result(
+                    ram_for_1_depth, 
+                    build_parameters.tmp_dir, 
+                    utils::get_tmp_filename("result", batch_id-1, -1, std::this_thread::get_id())
+            );
+            merge_results_task(results_storage.back(), d1_results_storage.front(), result, debug_cerr_mutex);
+            result.minimize();
+            results_storage.pop_back();
+            results_storage.push_back(std::move(result));
+            return;
+        }
+
+        else {
+            //3 files in last batch or odd number (make it even by merging 3 firsts together)
+            std::lock_guard<std::mutex> lock(task_stack_mutex);
+            task_stack.push(
+                {
+                    [this, &batch_id, &depth, &allocated_ram, &d1_results_storage, &d1_results_storage_mutex, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                        //merge 3 results
+                        ++running_task;
+                        Depth1Result left, middle, right;
+                        {
+                            std::lock_guard<std::mutex> lock(d1_results_storage_mutex);
+                            left = std::move(d1_results_storage.front());
+                            d1_results_storage.pop_front();
+                            middle = std::move(d1_results_storage.front());
+                            d1_results_storage.pop_front();
+                            right = std::move(d1_results_storage.front());
+                            d1_results_storage.pop_front();
+                        }
+                    
+                        depthn_result result(
+                                allocated_ram, //divide by the nb of results in next depth
+                                build_parameters.tmp_dir, 
+                                utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                        );
+                        merge_results_task(left, middle, right, result, debug_cerr_mutex);
+                        {
+                            std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                            tmp_results_storage.push_back(std::move(result));
+                        }
+                        --running_task;
+                        cv.notify_all();
+                    },
+                    "merge31_results_task"
+                }
+            );   
+            nb_d1 = nb_d1 - 3; 
+        }
+    } //end case odd number of files in batch
+
+    { //even number of files in batch, merge them 2 by 2
+        std::lock_guard<std::mutex> lock(task_stack_mutex);
+        while (nb_d1 != 0) {
+            task_stack.push(
+                {
+                    [this, &batch_id, &depth, &allocated_ram, &d1_results_storage, &d1_results_storage_mutex, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                        ++running_task;
+                        Depth1Result left, right;
+                        {
+                            std::lock_guard<std::mutex> lock(d1_results_storage_mutex);
+
+                            left = std::move(d1_results_storage.front());
+                            d1_results_storage.pop_front();
+
+                            right = std::move(d1_results_storage.front());
+                            d1_results_storage.pop_front();
+                        }
+
+                        // Create result object for merging
+                        depthn_result result(
+                            allocated_ram, 
+                            build_parameters.tmp_dir, 
+                            utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                        );
+
+                        // Perform the merge
+                        merge_results_task(left, right, result, debug_cerr_mutex);
+
+                        {
+                            std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                            tmp_results_storage.push_back(std::move(result));
+                        }
+                        --running_task;
+                        cv.notify_all();
+                    },
+                    "merge21_results_task"
+                }
+            );
+            nb_d1 = nb_d1 - 2;
+        }
+    }
+
+    //all merging tasks added to stack, notify threads
+    cv.notify_all();
+
+    //wait for all tasks to finish
+    {
+        std::unique_lock<std::mutex> lock(task_stack_mutex);
+        cv.wait(lock, [&]() {
+            return running_task.load() == 0 && task_stack.empty();
+        });
+    }
+    
+    //2ND STEP : MERGE DEPTH N RESULTS
+    depth++;
+    uint32_t nb_results = tmp_results_storage.size();
+     //divide by the nb of results in next depth
+    while (nb_results != 1){
+        allocated_ram = (nb_results == 1) ? ram_for_1_depth : ram_for_1_depth / (nb_results/2);
+        //iteratively go deeper into batch until everything merged 
+        {
+            std::lock_guard<std::mutex> lock(task_stack_mutex);
+            if (nb_results % 2 == 1) {
+                //odd number of results, 3 firsts are merged together
+                task_stack.push(
+                    {
+                        [this, &batch_id, &depth, &allocated_ram, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                            ++running_task;
+                            depthn_result left, middle, right;
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                left = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                                middle = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                                right = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                            }
+
+                            depthn_result result(
+                                    allocated_ram, //divide by the nb of results in next depth
+                                    build_parameters.tmp_dir, 
+                                    utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                            );
+                            merge_results_task(left, middle, right, result, debug_cerr_mutex);
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                tmp_results_storage.push_back(std::move(result));
+                            }
+                            --running_task;
+                            cv.notify_all();
+                        },
+                        "merge3n_results_task"
                     }
-                    cv.notify_all(); // Notify threads about new task
-                } //end while
-            } //end lock results_depth1_mutex
-        } //end lock results_mutex 
+                );
+                nb_results = nb_results - 3;
+            }
 
-        // TODO still miss odd number of files case : one d1 result left, need to merge it with a map
+            while (nb_results != 0) {
+                //even number of results, merge them 2 by 2
+                task_stack.push(
+                    {
+                        [this, &batch_id, &depth, &allocated_ram, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                            ++running_task;
+                            depthn_result left, right;
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                left = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                                right = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                            }
 
+                            depthn_result result(
+                                    allocated_ram,
+                                    build_parameters.tmp_dir, 
+                                    utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                            );
+                            merge_results_task(left, right, result, debug_cerr_mutex);
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                tmp_results_storage.push_back(std::move(result));
+                            }
+                            --running_task;
+                            cv.notify_all();
+                        },
+                        "merge2n_results_task"
+                    }
+                );
+                nb_results = nb_results - 2;
+            }
+        } //end lock on stack
+        cv.notify_all(); // Notify threads about new tasks
 
-        //end : sleep until new results
-
-        //TODO : dunno what to wait for, just wait some ms for now
-        /* {
-            std::unique_lock<std::mutex> lock(results_mutex);
-            cv.wait(lock, [&]() { 
-                return results.size() > 0;
+        //wait for all tasks to finish
+        {
+            std::unique_lock<std::mutex> lock(task_stack_mutex);
+            cv.wait(lock, [&]() {
+                return running_task.load() == 0 && task_stack.empty();
             });
-        } */
-        //wait a bit to do not spent time looping and keep locking access to stack and results
-        std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
+        }
+            
+
+        nb_results = tmp_results_storage.size();
+        depth++;
+    }
+
+    //all results merged, transfer to results_storage
+    tmp_results_storage.front().minimize();
+    results_storage.push_back(std::move(tmp_results_storage.front()));
+}
+
+
+CLASS_HEADER
+void
+METHOD_HEADER::process_files(
+    std::stack<Function>& task_stack,
+    std::mutex& task_stack_mutex,
+    std::deque<depthn_result>& results_storage,
+    std::condition_variable& cv,
+    std::atomic<uint32_t>& running_task,
+    std::mutex& debug_cerr_mutex,
+    const build::options_t& build_parameters)
+{
+    std::deque<Depth1Result> d1_results_storage;
+    std::mutex d1_results_storage_mutex;
+    uint16_t batch_id = 0;
+
+    for (size_t i = 0; i < m_filenames.size(); i += build_parameters.nthreads) {
+        //for each batch of files, do the parsing and merging
+        uint32_t start = i;
+        uint32_t end = (i + build_parameters.nthreads < m_filenames.size()) ? i + build_parameters.nthreads : m_filenames.size();
+
+        std::cerr << "\n\n// BATCH " << batch_id << " //\n";
+
+        init_batch(task_stack, task_stack_mutex, d1_results_storage, d1_results_storage_mutex, start, end, running_task, cv, build_parameters, debug_cerr_mutex);
+
+        //wait for all tasks to finish
+        {
+            std::unique_lock<std::mutex> lock(task_stack_mutex);
+            cv.wait(lock, [&]() {
+                return running_task.load() == 0 && task_stack.empty();
+            });
+        }
+
+        run_batch(batch_id, task_stack, task_stack_mutex, d1_results_storage, d1_results_storage_mutex, results_storage, running_task, cv, build_parameters, debug_cerr_mutex);
+
+        batch_id++;
     }
 }
+
+
+
+
+
+
+
+CLASS_HEADER
+void
+METHOD_HEADER::run_batch_tree(
+    uint16_t batch_id,
+    uint32_t batch_size,
+    std::stack<Function>& task_stack,
+    std::mutex& task_stack_mutex,
+    std::deque<depthn_result>& results_storage,
+    std::mutex& results_storage_mutex,
+    std::condition_variable& cv,
+    std::atomic<uint32_t>& running_task,
+    bool final_batch,
+    colors_to_minmer& final_result,
+    const build::options_t& build_parameters,
+    std::mutex& debug_cerr_mutex)
+{
+    if (batch_size == 1){
+        return;
+    }
+
+    std::deque<depthn_result> tmp_results_storage;
+    std::mutex tmp_results_storage_mutex;
+    uint16_t depth = 1;
+    uint64_t ram_for_1_depth = build_parameters.max_ram * constants::GB / 2;
+    uint64_t allocated_ram;
+
+    uint32_t nb_results = batch_size;
+    for (size_t i; i < batch_size; i++){
+        tmp_results_storage.push_back(std::move(results_storage.front()));
+        results_storage.pop_front();
+    }
+
+    if (final_batch){
+        while (nb_results != 2){
+            allocated_ram = (nb_results%2==0) ? (ram_for_1_depth / (nb_results/2)) : (ram_for_1_depth / ((nb_results+1)/2));
+            {
+                std::lock_guard<std::mutex> lock(task_stack_mutex);
+                while (nb_results > 1) {
+                    task_stack.push(
+                        {
+                            [this, &batch_id, &depth, &allocated_ram, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                                ++running_task;
+                                depthn_result left, right;
+                                {
+                                    std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                    left = std::move(tmp_results_storage.front());
+                                    tmp_results_storage.pop_front();
+                                    right = std::move(tmp_results_storage.front());
+                                    tmp_results_storage.pop_front();
+                                }
+
+                                depthn_result result(
+                                        allocated_ram,
+                                        build_parameters.tmp_dir, 
+                                        utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                                );
+                                merge_results_task(left, right, result, debug_cerr_mutex);
+                                {
+                                    std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                    tmp_results_storage.push_back(std::move(result));
+                                }
+                                --running_task;
+                                cv.notify_all();
+                            },
+                            "merge2n_final_task"
+                        }
+                    );
+                    nb_results = nb_results - 2;
+                }
+            }
+            cv.notify_all(); // Notify threads about new tasks
+
+            //wait for all tasks to finish
+            {
+                std::unique_lock<std::mutex> lock(task_stack_mutex);
+                cv.wait(lock, [&]() {
+                    return running_task.load() == 0 && task_stack.empty();
+                });
+            }
+            nb_results = tmp_results_storage.size();
+        }
+        // only 2 results left, merge them into a sorted emem, colors to minmers
+        merge_results_task(tmp_results_storage.front(), tmp_results_storage.back(), final_result, debug_cerr_mutex);
+
+        return;
+    }
+
+    //crash here if only one result in last batch, did special case for now
+    while (nb_results != 1){
+        allocated_ram = (nb_results == 1) ? ram_for_1_depth : ram_for_1_depth / (nb_results/2);
+        //iteratively go deeper into batch until everything merged 
+        {
+            std::lock_guard<std::mutex> lock(task_stack_mutex);
+            if (nb_results % 2 == 1) {
+                //odd number of results, 3 firsts are merged together
+                task_stack.push(
+                    {
+                        [this, &batch_id, &depth, &allocated_ram, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                            ++running_task;
+                            depthn_result left, middle, right;
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                left = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                                middle = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                                right = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                            }
+
+                            depthn_result result(
+                                    allocated_ram, //divide by the nb of results in next depth
+                                    build_parameters.tmp_dir, 
+                                    utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                            );
+                            merge_results_task(left, middle, right, result, debug_cerr_mutex);
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                tmp_results_storage.push_back(std::move(result));
+                            }
+                            --running_task;
+                            cv.notify_all();
+                        },
+                        "merge3n_results_task"
+                    }
+                );
+                nb_results = nb_results - 3;
+            }
+
+            while (nb_results != 0) {
+                //even number of results, merge them 2 by 2
+                task_stack.push(
+                    {
+                        [this, &batch_id, &depth, &allocated_ram, &tmp_results_storage, &tmp_results_storage_mutex, &build_parameters, &cv, &running_task, &debug_cerr_mutex]() {
+                            ++running_task;
+                            depthn_result left, right;
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                left = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                                right = std::move(tmp_results_storage.front());
+                                tmp_results_storage.pop_front();
+                            }
+
+                            depthn_result result(
+                                    allocated_ram,
+                                    build_parameters.tmp_dir, 
+                                    utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                            );
+                            merge_results_task(left, right, result, debug_cerr_mutex);
+                            {
+                                std::lock_guard<std::mutex> lock(tmp_results_storage_mutex);
+                                tmp_results_storage.push_back(std::move(result));
+                            }
+                            --running_task;
+                            cv.notify_all();
+                        },
+                        "merge2n_results_task"
+                    }
+                );
+                nb_results = nb_results - 2;
+            }
+        } //end lock on stack
+        cv.notify_all(); // Notify threads about new tasks
+
+        //wait for all tasks to finish
+        {
+            std::unique_lock<std::mutex> lock(task_stack_mutex);
+            cv.wait(lock, [&]() {
+                return running_task.load() == 0 && task_stack.empty();
+            });
+        }
+            
+
+        nb_results = tmp_results_storage.size();
+        depth++;
+    }
+
+    //all results merged, transfer to results_storage
+    tmp_results_storage.front().minimize();
+    results_storage.push_back(std::move(tmp_results_storage.front()));
+}
+
+
+
+
+CLASS_HEADER
+void
+METHOD_HEADER::process_tree(
+    std::stack<Function>& task_stack,
+    std::mutex& task_stack_mutex,
+    std::deque<depthn_result>& results_storage,
+    std::mutex& results_storage_mutex,
+    std::condition_variable& cv,
+    std::atomic<uint32_t>& running_task,
+    colors_to_minmer& final_result,
+    std::mutex& debug_cerr_mutex,
+    const build::options_t& build_parameters)
+{
+    bool final_batch = false;
+    uint16_t batch_id = 0;
+
+    while (results_storage.size() != 1){
+        uint32_t nb_results = results_storage.size();
+        final_batch = (nb_results <= build_parameters.nthreads);
+
+        for (size_t i = 0; i < nb_results; i += build_parameters.nthreads){
+            std::cerr << "\n\n// BATCH " << batch_id << " //\n";
+            //for each batch of results, do the merging
+            uint32_t batch_size = (i + build_parameters.nthreads < nb_results) ? build_parameters.nthreads : nb_results-i;
+
+            run_batch_tree(batch_id, batch_size, task_stack, task_stack_mutex,  results_storage, results_storage_mutex, cv, running_task, final_batch, final_result, build_parameters, debug_cerr_mutex);
+
+            batch_id++;
+            if (final_batch) return;
+        }
+    }
+}
+
+
+
 
 CLASS_HEADER
 void
 METHOD_HEADER::build2(const build::options_t& build_parameters)
 {
     std::cerr << "DEBUG BUILD 2\n";
-
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::mutex debug_cerr_mutex;
+    assert(m_filenames.size() > build_parameters.nthreads);
+    //TODO, allow final_result in process_files(), for now only in process_tree()
 
-    // Shared state
-    std::stack<Function> task_stack;
-    std::mutex task_stack_mutex;
-
-    std::deque<minmer_set_docid> results_depth1;
-    std::mutex results_depth1_mutex;
-    std::deque<result_map> results;
-    std::mutex results_mutex;
-
+    //synchro variables
     std::condition_variable cv;
     std::atomic<uint32_t> running_task(0);
     std::atomic<bool> all_done(false);
 
-    // Initialize task stack with file-reading tasks
-    int doc_id = 0;
-    for (const auto& file : m_filenames) {
-        task_stack.push( //Function(f, desc)
-            {
-                [this, &running_task, file, doc_id, &results_depth1, &results_depth1_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
-                    ++running_task;
-                    minmer_set_docid result = {ankerl::unordered_dense::set<minimizer_t>(), doc_id};
-                    this->read_file_task(file, doc_id, result, build_parameters, debug_cerr_mutex);
-                    {
-                        std::lock_guard<std::mutex> lock(results_depth1_mutex);
-                        results_depth1.push_back(std::move(result));
-                    }
-                    --running_task;
-                    cv.notify_all(); // Notify manager that a new result is available
-                }, 
-                "read_file_task" //function desc 
-            }
-        );
-        doc_id++;
-    }
+    std::stack<Function> task_stack;
+    std::mutex task_stack_mutex;
 
-    // Start manager thread
-    std::thread manager([this, &task_stack, &task_stack_mutex, &results_depth1, &results_depth1_mutex, &results, &results_mutex, &cv, &running_task, &all_done, &debug_cerr_mutex]() {
-        this->manager_thread(task_stack, task_stack_mutex, results_depth1, results_depth1_mutex, results, results_mutex,  cv, running_task, all_done, debug_cerr_mutex);
-    });
+    std::deque<depthn_result> results_storage;
+    std::mutex results_storage_mutex;
 
-    // Start worker threads
+    colors_to_minmer final_result(
+        build_parameters.max_ram * constants::GB / 2, 
+        build_parameters.tmp_dir, 
+        utils::get_tmp_filename("final_result", 0, 0, std::this_thread::get_id())
+    );
+
+    std::mutex debug_cerr_mutex;
+
+    // Create worker threads
     std::vector<std::thread> workers;
-    for (int i = 0; i < build_parameters.nthreads - 1; ++i) {
-        workers.emplace_back([this, &task_stack, &task_stack_mutex, &cv, &running_task, &all_done, &debug_cerr_mutex]() {
-            this->worker_thread(task_stack, task_stack_mutex, cv, running_task, all_done,  debug_cerr_mutex);
-        });
+    for (uint32_t i = 0; i < build_parameters.nthreads; ++i) {
+        workers.push_back(std::thread(
+            &METHOD_HEADER::worker_thread, 
+            this, std::ref(task_stack), std::ref(task_stack_mutex), std::ref(cv), std::ref(running_task), std::ref(all_done), std::ref(debug_cerr_mutex)
+        ));
     }
 
-    
-    // Wait for workers to finish
+    process_files(task_stack, task_stack_mutex, results_storage, cv, running_task, debug_cerr_mutex, build_parameters);
+
+    {
+        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+        std::cerr << "All files processed\n";
+        std::cerr << results_storage.size() << " results in storage\n";
+        std::cerr << results_storage.front().size() << " results in first depthn\n";
+    }
+
+    std::cout << "DEBUG Time for process_files: " 
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start_time
+                    ).count() 
+                << " milliseconds\n";
+
+    start_time = std::chrono::high_resolution_clock::now();
+
+    process_tree(task_stack, task_stack_mutex, results_storage, results_storage_mutex, cv, running_task, final_result, debug_cerr_mutex, build_parameters);
+
+    // Mark all tasks as done
+    all_done.store(true);
+    cv.notify_all();
+
+    {
+        std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+        std::cerr << "All tree processed\n";
+        std::cerr << results_storage.size() << " results in storage\n";
+        std::cerr << final_result.size() << " pairs in final\n";
+    }
+
+    // Wait for worker threads to finish
     for (auto& worker : workers) {
         worker.join();
     }
-    // Wait for manager to finish
-    manager.join();
 
-    assert(results.size() == 1);
-    result_map& minmer_to_colors = results.front();
+    std::cout << "DEBUG Time for process_tree: " 
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start_time
+                    ).count() 
+                << " milliseconds\n";
+
+
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
-    for (const auto& [minmer, colors] : minmer_to_colors) {
-        unique_minmers.insert(minmer);
+    //TODO : can be done inside process_tree() to avoid running through again
+    auto itr = final_result.cbegin();
+    while(itr != final_result.cend()) {
+        unique_minmers.insert((*itr).second);
+        ++itr;
     }
 
     {
@@ -860,26 +1345,20 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
                 m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
         }
 
-        std::unordered_map<std::vector<uint32_t>, uint32_t, VectorHash> color_to_cid;        
         uint32_t cid = 0;
-
-        for (const auto& pair : minmer_to_colors) {
-            const auto& minmer = pair.first;
-            const auto& colors = pair.second;
-
-            // Check if this vector already has a cid
-            if (color_to_cid.find(colors) == color_to_cid.end()) {
-                // Assign a new cid
-                color_to_cid[colors] = cid++;
-                cbuild.add_color_set(colors.data(), colors.size());
+        auto itr = final_result.cbegin();
+        while(itr != final_result.cend()) {
+            auto current_color = (*itr).first;
+            cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
+            while(itr != final_result.cend() and (*itr).first == current_color) {
+                auto minimizer = (*itr).second;
+                auto mp_idx = hf(minimizer);
+                // std::cerr << minimizer << " -> " << mp_idx << "\n";
+                m_map_builder.set(mp_idx, cid);
+                ++itr;
             }
-
-            
-            // Map minmer to the cid
-            m_map_builder.set(hf(minmer), cid);
+            ++cid;
         }
-
-        
         cbuild.build(m_ccs);
         m_map_builder.build(m_map);
         //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
@@ -898,7 +1377,7 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
     if (build_parameters.verbose > 0) {
         std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
-    }
+    } 
 
 }
 
@@ -910,3 +1389,15 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
 } // namespace kaminari
 
 #endif // KAMINARI_INDEX_HPP
+
+
+
+/*Number of ids: 50
+Number of colors (lists of ids):188898
+The list of input filenames weights: 4134 Bytes
+The MPHF of minimizers weights: 1059855 Bytes
+Colors weight: 1708436 Bytes
+The mapping from minimizers to colors weights: 8883056 Bytes
+
+Written 11655515 Bytes
+*/

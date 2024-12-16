@@ -5,6 +5,7 @@
 #include <string>
 #include <cstdint>
 #include <iostream>
+#include <thread>
 
 #include "sys/types.h"
 #include "sys/sysinfo.h"
@@ -17,6 +18,7 @@ namespace kaminari::utils {
 
 std::vector<std::string> read_filenames(std::string const& filenames_list);
 std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, uint64_t run_identifier);
+std::string get_tmp_filename(const std::string& prefix, uint16_t batch_id, uint16_t depth, std::thread::id tid);
 
 template<class ForwardIt>
 ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
