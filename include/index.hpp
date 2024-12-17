@@ -225,6 +225,8 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     build2(build_parameters);
 }
 
+
+
 CLASS_HEADER
 void 
 METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
@@ -648,6 +650,10 @@ METHOD_HEADER::worker_thread(
             }
         }
         if (task.f) {
+            {
+                std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+                std::cerr << "Running task: " << task.desc << std::endl;
+            }
             task.f();
             running_task--;
             cv.notify_all();
@@ -671,6 +677,7 @@ METHOD_HEADER::init_batch(
     std::mutex& debug_cerr_mutex)
 {
     uint64_t allocated_ram = build_parameters.max_ram * constants::GB / 2 / (end - start);
+    std::cerr << "Allocated RAM: " << allocated_ram << " Bytes\n";
     {
         std::lock_guard<std::mutex> lock(task_stack_mutex);
         for (uint32_t docid = start; docid < end; ++docid) {
