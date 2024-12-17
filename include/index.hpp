@@ -1015,7 +1015,7 @@ METHOD_HEADER::run_batch_tree(
 
     std::deque<depthn_result> tmp_results_storage;
     std::mutex tmp_results_storage_mutex;
-    uint16_t depth = 1;
+    uint16_t depth = build_parameters.nthreads;
     uint64_t ram_for_1_depth = build_parameters.max_ram * constants::GB / 2;
     uint64_t allocated_ram;
 
@@ -1047,7 +1047,7 @@ METHOD_HEADER::run_batch_tree(
                                 depthn_result result(
                                         allocated_ram,
                                         build_parameters.tmp_dir, 
-                                        utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                                        utils::get_tmp_filename("tree_result", batch_id, depth, std::this_thread::get_id())
                                 );
                                 merge_results_task(left, right, result, debug_cerr_mutex);
                                 {
@@ -1073,6 +1073,7 @@ METHOD_HEADER::run_batch_tree(
                 });
             }
             nb_results = tmp_results_storage.size();
+            depth++;
         }
         // only 2 results left, merge them into a sorted emem, colors to minmers
         merge_results_task(tmp_results_storage.front(), tmp_results_storage.back(), final_result, debug_cerr_mutex);
@@ -1106,7 +1107,7 @@ METHOD_HEADER::run_batch_tree(
                             depthn_result result(
                                     allocated_ram, //divide by the nb of results in next depth
                                     build_parameters.tmp_dir, 
-                                    utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                                    utils::get_tmp_filename("tree_result", batch_id, depth, std::this_thread::get_id())
                             );
                             merge_results_task(left, middle, right, result, debug_cerr_mutex);
                             {
@@ -1140,7 +1141,7 @@ METHOD_HEADER::run_batch_tree(
                             depthn_result result(
                                     allocated_ram,
                                     build_parameters.tmp_dir, 
-                                    utils::get_tmp_filename("result", batch_id, depth, std::this_thread::get_id())
+                                    utils::get_tmp_filename("tree_result", batch_id, depth, std::this_thread::get_id())
                             );
                             merge_results_task(left, right, result, debug_cerr_mutex);
                             {
