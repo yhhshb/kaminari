@@ -686,6 +686,10 @@ METHOD_HEADER::init_batch(
                 {
                     [this, &start, &allocated_ram, docid, &d1_results_storage, &d1_results_storage_mutex, &running_task, &cv, &build_parameters, &debug_cerr_mutex]() {
                         ++running_task;
+                        {
+                            std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+                            std::cerr << "gonna create a d1 result with allocated ram: " << allocated_ram << " Bytes\n";
+                        }
                         Depth1Result result(
                             {
                                 emem_minmers(
