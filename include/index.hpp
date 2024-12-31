@@ -16,6 +16,8 @@
 #include "../bundled/biolib/bundled/prettyprint.hpp"
 #include "../bundled/biolib/include/bit_vector.hpp"
 #include "../bundled/biolib/include/elias_fano.hpp"
+#include "../bundled/biolib/include/iterator/standalone_iterator.hpp"
+#include "../bundled/biolib/include/iterator/sorted_merge_iterator.hpp"
 #include "../bundled/unordered_dense/include/ankerl/unordered_dense.h"
 
 #include <chrono>
@@ -35,6 +37,9 @@ struct scored {
 };
 
 typedef scored<uint32_t> scored_id;
+
+typedef std::pair<uint64_t, uint32_t> value_t;
+typedef emem::external_memory_vector<value_t> emem_t;
 
 typedef emem::external_memory_vector<uint64_t> emem_minmers;
 struct Depth1Result {
@@ -105,6 +110,7 @@ class index
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
         void build2(const build::options_t& build_parameters);
+        void build3(const build::options_t& build_parameters);
         void worker_thread(
             std::stack<Function>& task_stack,
             std::mutex& task_stack_mutex,
@@ -123,7 +129,7 @@ class index
         void merge_results_task(const depthn_result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
         void merge_results_task(const depthn_result& left, const depthn_result& right, colors_to_minmer& final_result, std::mutex& debug_cerr_mutex);
 
-        void read_file_task(const std::string& file, uint32_t doc_id, Depth1Result& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
+        void read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
 
         void init_batch(
             std::stack<Function>& task_stack,
@@ -222,7 +228,7 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
 {
-    build2(build_parameters);
+    build3(build_parameters);
 }
 
 
@@ -289,10 +295,51 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
 Build 2 is a parallel version of build, using a thread pool to read files and merge results.
 */
 
+// Worker thread function
+CLASS_HEADER
+void
+METHOD_HEADER::worker_thread(
+    std::stack<Function>& task_stack,
+    std::mutex& task_stack_mutex,
+    std::condition_variable& cv,
+    std::atomic<uint32_t>& running_task,
+    std::atomic<bool>& all_done,
+    std::mutex& debug_cerr_mutex) 
+{
+    while (true) {
+        Function task;
+        {
+            std::unique_lock<std::mutex> lock(task_stack_mutex);
+            cv.wait(lock, [&]() {
+                return !task_stack.empty() || all_done.load(); 
+            });
+
+            if (all_done.load() && task_stack.empty()) { //all done should be set to 1 only if stack empty but w/e
+                break; // Exit if no tasks and manager is done
+            }
+
+            if (!task_stack.empty()) {
+                running_task++; //already one in task but security (2 tasks running for each task)
+                task = std::move(task_stack.top());
+                task_stack.pop();
+            }
+        }
+        if (task.f) {
+            {
+                std::lock_guard<std::mutex> lock(debug_cerr_mutex);
+                std::cerr << "Running task: " << task.desc << std::endl;
+            }
+            task.f();
+            running_task--;
+            cv.notify_all();
+        }
+    }
+}
+
 // Function to read a file
 CLASS_HEADER
 void 
-METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, Depth1Result& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
+METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
     std::size_t total_kmers = 0;
     std::size_t total_mmers = 0;
     std::size_t total_minimizers = 0;
@@ -327,7 +374,8 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, Depth1Re
         // duplicates removed during merge
         std::vector<minimizer_t> minimizers;
         for (auto r : mms_buffer) {
-            result.minmers.push_back(r.itself);
+            result.push_back(
+                std::make_pair(r.itself, doc_id));
         }
         mms_buffer.clear();
     }
@@ -335,9 +383,8 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, Depth1Re
     gzclose(fp);
     fp = nullptr;
     seq = nullptr;
-    result.docid = doc_id;
 }
-
+/*
 // Function to merge two or 3 depth_1 results
 CLASS_HEADER
 void
@@ -620,46 +667,7 @@ METHOD_HEADER::merge_results_task(const depthn_result& left, const depthn_result
 }
 
 
-// Worker thread function
-CLASS_HEADER
-void
-METHOD_HEADER::worker_thread(
-    std::stack<Function>& task_stack,
-    std::mutex& task_stack_mutex,
-    std::condition_variable& cv,
-    std::atomic<uint32_t>& running_task,
-    std::atomic<bool>& all_done,
-    std::mutex& debug_cerr_mutex) 
-{
-    while (true) {
-        Function task;
-        {
-            std::unique_lock<std::mutex> lock(task_stack_mutex);
-            cv.wait(lock, [&]() {
-                return !task_stack.empty() || all_done.load(); 
-            });
 
-            if (all_done.load() && task_stack.empty()) { //all done should be set to 1 only if stack empty but w/e
-                break; // Exit if no tasks and manager is done
-            }
-
-            if (!task_stack.empty()) {
-                running_task++; //already one in task but security (2 tasks running for each task)
-                task = std::move(task_stack.top());
-                task_stack.pop();
-            }
-        }
-        if (task.f) {
-            {
-                std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                std::cerr << "Running task: " << task.desc << std::endl;
-            }
-            task.f();
-            running_task--;
-            cv.notify_all();
-        }
-    }
-}
 
 
 CLASS_HEADER
@@ -1390,6 +1398,117 @@ METHOD_HEADER::build2(const build::options_t& build_parameters)
         std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     } 
+
+}*/
+
+
+CLASS_HEADER
+void
+METHOD_HEADER::build3(const build::options_t& build_parameters)
+{
+    std::cerr << "DEBUG BUILD 3\n";
+    
+    //synchro variables
+    std::condition_variable cv;
+    std::atomic<uint32_t> running_task(0);
+    std::atomic<bool> all_done(false);
+    std::mutex debug_cerr_mutex;
+
+    std::stack<Function> task_stack;
+    std::mutex task_stack_mutex;
+
+    std::deque<emem_t> results_storage;
+    std::mutex results_mutex;
+
+    uint32_t doc_id = 0;
+    for (const auto& file : m_filenames) {
+        task_stack.push( //Function(f, desc)
+            {
+                [this, &running_task, file, &doc_id, &results_storage, &results_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
+                    ++running_task;
+                    emem_t result(
+                        build_parameters.max_ram * constants::GB / build_parameters.nthreads,
+                        build_parameters.tmp_dir, 
+                        utils::get_tmp_filename("", "parse_result_doc", doc_id));
+
+                    this->read_file_task(file, doc_id++, result, build_parameters, debug_cerr_mutex);
+
+                    result.minimize();
+                    {
+                        std::lock_guard<std::mutex> lock(results_mutex);
+                        results_storage.push_back(std::move(result));
+                    }
+                    --running_task;
+                    cv.notify_all(); // Notify manager that a new result is available
+                }, 
+                "read_file_task" //function desc 
+            }
+        );
+    }
+
+    
+    // Create worker threads
+    std::vector<std::thread> workers;
+    for (uint32_t i = 0; i < build_parameters.nthreads; ++i) {
+        workers.push_back(std::thread(
+            &METHOD_HEADER::worker_thread, 
+            this, std::ref(task_stack), std::ref(task_stack_mutex), std::ref(cv), std::ref(running_task), std::ref(all_done), std::ref(debug_cerr_mutex)
+        ));
+    }
+
+    //wait for all tasks to finish
+    {
+        std::unique_lock<std::mutex> lock(task_stack_mutex);
+        cv.wait(lock, [&]() {
+            return running_task.load() == 0 && task_stack.empty();
+        });
+    }
+
+    // Mark all tasks as done
+    all_done.store(true);
+    cv.notify_all();
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
+    
+
+    
+    /* std::vector<value_t> check;
+    std::size_t size = 10;
+    std::mt19937 gen(43); // Standard mersenne_twister_engine seeded with rd()
+    std::vector<emem_t> vectors;
+    std::uniform_int_distribution<std::size_t> lengths(0, 10);
+    std::uniform_int_distribution<uint64_t> values(0, 100);
+
+    for (uint32_t i = 0; i < 10; ++i)
+        {
+            vectors.emplace_back(10000, "/tmp", std::string("kmp_test_sorted_emv") + std::to_string(i));
+            for (uint64_t k = 0; k < size; ++k) {
+                std::vector<uint32_t> key;
+                for (std::size_t j = 0; j < lengths(gen); ++j) {
+                    vectors.back().push_back(std::make_pair(values(gen), i));
+                    check.push_back(std::make_pair(values(gen), i));
+                }
+            }
+        }
+
+    std::vector<iterators::standalone_iterator<emem_t::const_iterator>> itr_vec;
+
+    for (auto& em : vectors) {
+        auto sa_itr = iterators::standalone::const_from(em);
+        itr_vec.push_back(sa_itr);
+    }
+
+    std::vector<value_t> checked;
+    iterators::sorted_merge_iterator<emem_t::const_iterator> end;
+    for (auto itr = iterators::sorted_merge_iterator(itr_vec); itr != end; ++itr) {
+        checked.push_back(*itr);
+    }
+    std::sort(check.begin(), check.end());
+    assert(check.size());
+    assert(check == checked);
+    std::cerr << "check ;" << check << "\n"; */
 
 }
 

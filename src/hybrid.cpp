@@ -4,7 +4,7 @@
 #include <cassert>
 
 #include "../include/hybrid.hpp"
-#include "../bundled/biolib/include/counting_iterator.hpp"
+#include "../bundled/biolib/include/iterator/counting_iterator.hpp"
 
 // #include <iostream>
 

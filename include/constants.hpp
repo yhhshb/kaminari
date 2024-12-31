@@ -10,7 +10,7 @@ extern "C" {
 #include "compile_constants.tdp"
 #include "../bundled/biolib/include/external_memory_vector.hpp"
 #include "../bundled/biolib/include/ordered_unique_sampler.hpp"
-#include "../bundled/biolib/include/member_iterator.hpp"
+#include "../bundled/biolib/include/iterator/member_iterator.hpp"
 #include "../bundled/biolib/include/io.hpp"
 #include "../bundled/biolib/include/logtools.hpp"
 #include "../bundled/biolib/include/hash.hpp"
