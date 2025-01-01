@@ -325,10 +325,6 @@ METHOD_HEADER::worker_thread(
             }
         }
         if (task.f) {
-            {
-                std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-                std::cerr << "Running task: " << task.desc << std::endl;
-            }
             task.f();
             running_task--;
             cv.notify_all();
@@ -1407,6 +1403,8 @@ void
 METHOD_HEADER::build3(const build::options_t& build_parameters)
 {
     std::cerr << "DEBUG BUILD 3\n";
+
+    auto start_time = std::chrono::high_resolution_clock::now();
     
     //synchro variables
     std::condition_variable cv;
@@ -1417,21 +1415,21 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
     std::stack<Function> task_stack;
     std::mutex task_stack_mutex;
 
-    std::deque<emem_t> results_storage;
+    std::vector<emem_t> results_storage;
     std::mutex results_mutex;
 
     uint32_t doc_id = 0;
     for (const auto& file : m_filenames) {
         task_stack.push( //Function(f, desc)
             {
-                [this, &running_task, file, &doc_id, &results_storage, &results_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
+                [this, &running_task, file, doc_id, &results_storage, &results_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
                     ++running_task;
                     emem_t result(
                         build_parameters.max_ram * constants::GB / build_parameters.nthreads,
                         build_parameters.tmp_dir, 
                         utils::get_tmp_filename("", "parse_result_doc", doc_id));
 
-                    this->read_file_task(file, doc_id++, result, build_parameters, debug_cerr_mutex);
+                    this->read_file_task(file, doc_id, result, build_parameters, debug_cerr_mutex);
 
                     result.minimize();
                     {
@@ -1444,6 +1442,7 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
                 "read_file_task" //function desc 
             }
         );
+        doc_id++;
     }
 
     
@@ -1471,45 +1470,142 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
     for (auto& worker : workers) {
         worker.join();
     }
-    
 
-    
-    /* std::vector<value_t> check;
-    std::size_t size = 10;
-    std::mt19937 gen(43); // Standard mersenne_twister_engine seeded with rd()
-    std::vector<emem_t> vectors;
-    std::uniform_int_distribution<std::size_t> lengths(0, 10);
-    std::uniform_int_distribution<uint64_t> values(0, 100);
+    std::cout << "DEBUG Time for parsing: " 
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start_time
+                    ).count() 
+                << " milliseconds\n";
+    // all emem created, filled, sorted, dumped to disk
 
-    for (uint32_t i = 0; i < 10; ++i)
-        {
-            vectors.emplace_back(10000, "/tmp", std::string("kmp_test_sorted_emv") + std::to_string(i));
-            for (uint64_t k = 0; k < size; ++k) {
-                std::vector<uint32_t> key;
-                for (std::size_t j = 0; j < lengths(gen); ++j) {
-                    vectors.back().push_back(std::make_pair(values(gen), i));
-                    check.push_back(std::make_pair(values(gen), i));
-                }
-            }
-        }
+    //STEP 2 : MERGE RESULTS ===================================================
+
+    start_time = std::chrono::high_resolution_clock::now();
+    ankerl::unordered_dense::set<uint64_t> unique_minmers;
+
+    colors_to_minmer final_result(
+        build_parameters.max_ram * constants::GB * 0.75, //leave space for unique_minmers
+        build_parameters.tmp_dir, 
+        utils::get_tmp_filename("", "final_merge", 0)
+    );
+
 
     std::vector<iterators::standalone_iterator<emem_t::const_iterator>> itr_vec;
-
-    for (auto& em : vectors) {
-        auto sa_itr = iterators::standalone::const_from(em);
+    for (auto& emem : results_storage) {
+        auto sa_itr = iterators::standalone::const_from(emem);
         itr_vec.push_back(sa_itr);
     }
 
-    std::vector<value_t> checked;
+    uint64_t smallest;
+    auto itr = iterators::sorted_merge_iterator(itr_vec);
     iterators::sorted_merge_iterator<emem_t::const_iterator> end;
-    for (auto itr = iterators::sorted_merge_iterator(itr_vec); itr != end; ++itr) {
-        checked.push_back(*itr);
-    }
-    std::sort(check.begin(), check.end());
-    assert(check.size());
-    assert(check == checked);
-    std::cerr << "check ;" << check << "\n"; */
 
+
+    while (itr != end){
+
+        smallest = (*itr).first;
+        std::pair<std::vector<uint32_t>, uint64_t> color_minmer = {{(*itr).second}, smallest};
+        ++itr;
+        while (itr != end && (*itr).first == smallest) {
+            if ((*itr).second != color_minmer.first.back()){
+                //remove duplicates inside 1 file
+                color_minmer.first.push_back((*itr).second);
+            }
+            ++itr;
+        }
+
+        final_result.push_back(color_minmer);
+        unique_minmers.insert(smallest);
+    }
+
+    std::cout << "DEBUG Time for merging: " 
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start_time
+                    ).count() 
+                << " milliseconds\n";
+
+    //STEP 3 : BUILDING MPHF ===================================================
+    {
+        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());
+        int backup, redirect;
+        fflush(stdout);
+        backup = dup(1);
+        redirect = open("/dev/null", O_WRONLY);
+        dup2(redirect, 1);
+        close(redirect);
+
+        //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
+        hf.build_in_internal_memory(unique_minmers.begin(), unique_minmers.size(), get_pthash_options(build_parameters));
+
+        fflush(stdout);
+        dup2(backup, 1);
+        close(backup);
+        assert(hf.num_keys() == unique_minmers.size());
+        unique_minmers.clear();
+
+        std::cout << "DEBUG Time for MPHF build: " 
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start_time
+                    ).count() 
+                << " milliseconds\n";
+
+        std::cerr << "DEBUG End building MPHF\n";
+        std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+        utils::printRAMInfo();
+    }
+
+    std::cerr << "DEBUG in-between step 3 and 4\n";
+    utils::printRAMInfo();
+
+    //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
+    {
+        if (build_parameters.verbose > 0) std::cerr << "Step 4: list deduplication and mapping\n";
+        start_time = std::chrono::high_resolution_clock::now();
+        
+        typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
+        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
+
+        if (build_parameters.check) {
+            if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
+            for (std::size_t i = 0; i < hf.num_keys(); ++i) 
+                m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
+        }
+
+        uint32_t cid = 0;
+        auto itr = final_result.cbegin();
+        while(itr != final_result.cend()) {
+            auto current_color = (*itr).first;
+            cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
+            while(itr != final_result.cend() and (*itr).first == current_color) {
+                auto minimizer = (*itr).second;
+                auto mp_idx = hf(minimizer);
+                // std::cerr << minimizer << " -> " << mp_idx << "\n";
+                m_map_builder.set(mp_idx, cid);
+                ++itr;
+            }
+            ++cid;
+        }
+        cbuild.build(m_ccs);
+        m_map_builder.build(m_map);
+        //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
+    }
+
+    std::cout << "DEBUG Time for dedup + mapping: " 
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::high_resolution_clock::now() - start_time
+                 ).count() 
+              << " milliseconds\n";
+
+    std::cerr << "DEBUG end mapping\n";
+    std::cerr << "check mem breakdown for thr rest \n";
+    utils::printRAMInfo();
+
+    if (build_parameters.verbose > 0) {
+        std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
+        std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
+    } 
 }
 
 
