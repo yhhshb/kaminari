@@ -109,8 +109,6 @@ class index
 
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
         void build(const build::options_t& build_parameters);
-        void build2(const build::options_t& build_parameters);
-        void build3(const build::options_t& build_parameters);
         void worker_thread(
             std::stack<Function>& task_stack,
             std::mutex& task_stack_mutex,
@@ -118,73 +116,8 @@ class index
             std::atomic<uint32_t>& running_task,
             std::atomic<bool>& all_done,
             std::mutex& debug_cerr_mutex);
-
-        //merge 2 or 3 (case odd number) results post parsing files
-        void merge_results_task(const Depth1Result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
-        void merge_results_task(const Depth1Result& one, const Depth1Result& two, Depth1Result& three, depthn_result& result, std::mutex& debug_cerr_mutex);
-        //merge 2 or 3 (case odd number) results 
-        void merge_results_task(const depthn_result& left, const depthn_result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
-        void merge_results_task(const depthn_result& one, const depthn_result& two, const depthn_result& three, depthn_result& result, std::mutex& debug_cerr_mutex);
-        //merge depth1 result with depthn result, special case (unique file in last batch)
-        void merge_results_task(const depthn_result& left, const Depth1Result& right, depthn_result& result, std::mutex& debug_cerr_mutex);
-        void merge_results_task(const depthn_result& left, const depthn_result& right, colors_to_minmer& final_result, std::mutex& debug_cerr_mutex);
-
         void read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
 
-        void init_batch(
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::deque<Depth1Result>& d1_results_storage,
-            std::mutex& d1_results_storage_mutex,
-            uint32_t start,
-            uint32_t end,
-            std::atomic<uint32_t>& running_task,
-            std::condition_variable& cv,
-            const build::options_t& build_parameters,
-            std::mutex& debug_cerr_mutex);
-        void run_batch(
-            std::uint16_t batch_id,
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::deque<Depth1Result>& d1_results_storage,
-            std::mutex& d1_results_storage_mutex,
-            std::deque<depthn_result>& results_storage,
-            std::atomic<uint32_t>& running_task,
-            std::condition_variable& cv,
-            const build::options_t& build_parameters,
-            std::mutex& debug_cerr_mutex);
-        void process_files(
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::deque<depthn_result>& results_storage,
-            std::condition_variable& cv,
-            std::atomic<uint32_t>& running_task,
-            std::mutex& debug_cerr_mutex,
-            const build::options_t& build_parameters);
-
-        void run_batch_tree(
-            uint16_t batch_id,
-            uint32_t batch_size,
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::deque<depthn_result>& results_storage,
-            std::mutex& results_storage_mutex,
-            std::condition_variable& cv,
-            std::atomic<uint32_t>& running_task,
-            bool final_batch,
-            colors_to_minmer& final_result,
-            const build::options_t& build_parameters,
-            std::mutex& debug_cerr_mutex); 
-        void process_tree(
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::deque<depthn_result>& results_storage,
-            std::mutex& results_storage_mutex,
-            std::condition_variable& cv,
-            std::atomic<uint32_t>& running_task,
-            colors_to_minmer& final_result,
-            std::mutex& debug_cerr_mutex,
-            const build::options_t& build_parameters);
 
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
@@ -228,7 +161,7 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
 {
-    build3(build_parameters);
+    build(build_parameters);
 }
 
 
@@ -383,7 +316,7 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& 
 
 CLASS_HEADER
 void
-METHOD_HEADER::build3(const build::options_t& build_parameters)
+METHOD_HEADER::build(const build::options_t& build_parameters)
 {
     std::cerr << "DEBUG BUILD 3\n";
 
@@ -454,7 +387,7 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
         worker.join();
     }
 
-    std::cout << "DEBUG Time for parsing: " 
+    std::cerr << "DEBUG Time for parsing: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
@@ -480,9 +413,8 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
     }
 
     uint64_t smallest;
-    auto itr = iterators::sorted_merge_iterator(itr_vec);
+    auto itr = iterators::sorted_merge_iterator(std::move(itr_vec));
     iterators::sorted_merge_iterator<emem_t::const_iterator> end;
-
 
     while (itr != end){
 
@@ -598,15 +530,3 @@ METHOD_HEADER::build3(const build::options_t& build_parameters)
 } // namespace kaminari
 
 #endif // KAMINARI_INDEX_HPP
-
-
-
-/*Number of ids: 50
-Number of colors (lists of ids):188898
-The list of input filenames weights: 4134 Bytes
-The MPHF of minimizers weights: 1059855 Bytes
-Colors weight: 1708436 Bytes
-The mapping from minimizers to colors weights: 8883056 Bytes
-
-Written 11655515 Bytes
-*/
