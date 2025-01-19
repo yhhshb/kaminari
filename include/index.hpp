@@ -500,7 +500,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 auto minimizer = (*itr).second;
                 auto mp_idx = hf(minimizer);
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
-                cid_with_parity = (cid << 1) | __builtin_parity(minimizer);
+                cid_with_parity = (cid << 1) | (minimizer & 1);
                 m_map_builder.set(mp_idx, cid_with_parity);
                 ++itr;
             }

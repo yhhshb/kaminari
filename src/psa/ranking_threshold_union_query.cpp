@@ -41,10 +41,10 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
         for (const auto& record : mms_buffer) { 
             //std::cerr << "record : " << record.itself << " -> " << bit_to_nuc(record.itself, m) << " -pthash> " <<  hf(record.itself) <<  " -ccid> " <<  m_map[hf(record.itself)] << " -size> " << record.size << "\n";
             uint32_t cid_with_parity = m_map[hf(record.itself)];
-            if (__builtin_parity(record.itself) == cid_with_parity & 1){
+            if ((record.itself & 1) == (cid_with_parity & 1)){
                 //checkin not alien kmer
                 ccids_counts.push_back(std::make_pair(cid_with_parity >> 1, record.size)); //masking out parity
-            } 
+            }
             
         }
         if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
