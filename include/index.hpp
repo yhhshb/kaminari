@@ -480,7 +480,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         start_time = std::chrono::high_resolution_clock::now();
         
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys())));
+        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+1); //1bit for check
+        // TODO: ceil(log2(hf.num_keys())) depends on the number of unique minmer, should depend on the number of distinct colors instead, but should not bug because nb_distinct_colors <= nb_unique_minmers
 
         if (build_parameters.check) {
             if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
@@ -489,6 +490,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         }
 
         uint32_t cid = 0;
+        uint32_t cid_with_parity = 0;
+
         auto itr = final_result.cbegin();
         while(itr != final_result.cend()) {
             auto current_color = (*itr).first;
@@ -497,7 +500,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 auto minimizer = (*itr).second;
                 auto mp_idx = hf(minimizer);
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
-                m_map_builder.set(mp_idx, cid);
+                cid_with_parity = (cid << 1) | __builtin_parity(minimizer);
+                m_map_builder.set(mp_idx, cid_with_parity);
                 ++itr;
             }
             ++cid;
@@ -521,6 +525,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     } 
 }
+
+
 
 
 #undef CLASS_HEADER

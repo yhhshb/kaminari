@@ -31,22 +31,35 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
 {
     if (opts.verbose > 1) std::cerr << "step 1: collect color class ids\n";
     if (opts.verbose > 2) std::cerr << "s : " << q << " l : " << l << "\n"; 
-    std::vector<std::pair<std::size_t, uint32_t>> ccids_counts;
+    std::vector<std::pair<std::uint32_t, uint32_t>> ccids_counts;
     uint64_t contig_kmer_count; 
     { // collect color class ids
+        uint64_t m_map_width = m_map.width(); //number of bits for each colorid (+ parity check bit)
         std::size_t contig_mmer_count;
         std::vector<::minimizer::record_t> mms_buffer;
         contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
             //std::cerr << "record : " << record.itself << " -> " << bit_to_nuc(record.itself, m) << " -pthash> " <<  hf(record.itself) <<  " -ccid> " <<  m_map[hf(record.itself)] << " -size> " << record.size << "\n";
-            ccids_counts.push_back(std::make_pair(m_map[hf(record.itself)], record.size));
+            uint32_t cid_with_parity = m_map[hf(record.itself)];
+            if (__builtin_parity(record.itself) == cid_with_parity & 1){
+                //checkin not alien kmer
+                ccids_counts.push_back(std::make_pair(cid_with_parity >> 1, record.size)); //masking out parity
+            } 
+            
         }
         if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
     }
     if (opts.verbose > 3) std::cerr << ccids_counts << "\n";
 
 
-    /* std::vector<uint32_t> pbs;
+    /* 
+    width = 2
+    1UL << width-1 = 010
+    (1UL << width-1) - 1 = 001
+    0000 
+    
+    
+    std::vector<uint32_t> pbs;
     uint64_t tot = 0;
     for (int i = 0; i<ccids_counts.size(); i++){
         std::cerr << ccids_counts[i].first << " " << ccids_counts[i].second << "\n";
