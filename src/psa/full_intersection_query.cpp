@@ -20,7 +20,11 @@ METHOD_HEADER::query_full_intersection(char const * const q, const std::size_t l
         std::vector<::minimizer::record_t> mms_buffer;
         [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            ccids.push_back(m_map[(hf(record.itself))]);
+            uint32_t cid_with_parity = m_map[hf(record.itself)];
+            if ((record.itself & 1) == (cid_with_parity & 1)){
+                //checkin not alien kmer
+                ccids.push_back(cid_with_parity >> 1); //masking out parity
+            }
         }
     }
 
