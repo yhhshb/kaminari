@@ -26,9 +26,9 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         for (const auto& record : mms_buffer) { 
             //std::cerr << "record : " << record.itself << "\n";
             uint32_t cid_with_parity = m_map[hf(record.itself)];
-            if ((record.itself & 1) == (cid_with_parity & 1)){
+            if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
-                ccids_counts.push_back(std::make_pair(cid_with_parity >> 1, record.size)); //masking out parity
+                ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
             }
         }
         if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
@@ -87,17 +87,19 @@ METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClas
     std::size_t vec_size = color_id_itrs.size();
     std::size_t filenames_size = m_filenames.size();
 
-    std::vector<uint32_t> counts(filenames_size, nb_kmers);
+    std::vector<uint32_t> counts(filenames_size, 0);
+    uint64_t global_count = 0;
 
     for (uint64_t i = 0; i != vec_size; ++i) {
+        global_count += color_id_itrs[i].second;
         while (color_id_itrs[i].first.comp_value() < filenames_size) { //"<" and not "!=" because in case of color having every docid, comp_val stays -1, in an unsigned int so 2^32-1
-            counts[color_id_itrs[i].first.comp_value()] -= color_id_itrs[i].second;
+            counts[color_id_itrs[i].first.comp_value()] += color_id_itrs[i].second;
             color_id_itrs[i].first.comp_next();
         }
     }
 
     for (uint32_t i = 0; i != filenames_size; ++i) {
-        if (counts[i] >= threshold) colors.push_back(i);
+        if (global_count - counts[i] >= threshold) colors.push_back(i);
     }
 
     return colors;

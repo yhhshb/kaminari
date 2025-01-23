@@ -41,9 +41,9 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
         for (const auto& record : mms_buffer) { 
             //std::cerr << "record : " << record.itself << " -> " << bit_to_nuc(record.itself, m) << " -pthash> " <<  hf(record.itself) <<  " -ccid> " <<  m_map[hf(record.itself)] << " -size> " << record.size << "\n";
             uint32_t cid_with_parity = m_map[hf(record.itself)];
-            if ((record.itself & 7) == (cid_with_parity & 7)){
+            if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
-                ccids_counts.push_back(std::make_pair(cid_with_parity >> 3, record.size)); //masking out parity
+                ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
             }
             
         }
@@ -120,23 +120,28 @@ std::vector<scored_id>
 METHOD_HEADER::ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers) const noexcept
 {
     if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
+    std::cerr << "threshold (dense) : " << threshold << "\n";
+    std::cerr << "color_id_itrs.size() : " << color_id_itrs.size() << "\n";
+
     
     std::vector<scored_id> colors;
     std::size_t vec_size = color_id_itrs.size();
     std::size_t filenames_size = m_filenames.size();
 
-    std::vector<uint32_t> counts(filenames_size, nb_kmers);
+    std::vector<uint32_t> counts(filenames_size, 0);
+    uint64_t global_count = 0;
     
 
     for (uint64_t i = 0; i != vec_size; ++i) {
+        global_count = global_count + color_id_itrs[i].second;
         while (color_id_itrs[i].first.comp_value() < filenames_size) {
-            counts[color_id_itrs[i].first.comp_value()] -= color_id_itrs[i].second;
+            counts[color_id_itrs[i].first.comp_value()] += color_id_itrs[i].second;
             color_id_itrs[i].first.comp_next();
         }
     }
 
     for (uint32_t i = 0; i != filenames_size; ++i) {
-        if (counts[i] >= threshold) colors.push_back(scored_id{i, counts[i]});
+        if (global_count - counts[i] >= threshold) colors.push_back(scored_id{i, counts[i]});
     }
 
     return colors;
@@ -148,6 +153,8 @@ std::vector<scored_id>
 METHOD_HEADER::ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept
 {
     if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
+    std::cerr << "threshold (mixed) : " << threshold << "\n";
+    std::cerr << "color_id_itrs.size() : " << color_id_itrs.size() << "\n";
     
     std::vector<scored_id> colors;
     std::size_t vec_size = color_id_itrs.size();

@@ -134,8 +134,8 @@ void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vec
     using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, pthash::compact_vector>::*)(const char*, std::size_t, options_t&) const;
 
    query_fn_t query_algo;
-    if (opts.threshold_ratio == 1) {
-        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_full_intersection;
+    if (opts.threshold_ratio == 1) { //TODO: remove this, it is a temporary fix (full intersec deleted)
+        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
     } else {
         query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
     }
