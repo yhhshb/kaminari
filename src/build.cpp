@@ -72,10 +72,6 @@ argparse::ArgumentParser get_parser()
         .help("canonical minimizers")
         .default_value(false)
         .implicit_value(true);
-    parser.add_argument("-b", "--bit-check")
-        .help("number of bits used to check minmers [0]")
-        .scan<'d', size_t>()
-        .default_value(size_t(0));
     parser.add_argument("-C", "--check")
         .help("check MPHF correctness")
         .implicit_value(true)
@@ -113,7 +109,6 @@ options_t check_args(const argparse::ArgumentParser& parser)
     }
     opts.max_ram = tmp;
     opts.seed = parser.get<uint64_t>("--seed");
-    opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
     opts.check = parser.get<bool>("--check");

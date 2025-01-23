@@ -133,7 +133,6 @@ class index
         std::vector<std::string> m_filenames;
         uint8_t k;
         uint8_t m;
-        uint8_t b;
         uint64_t seed;
         bool canonical;
         double pthash_constant;
@@ -147,7 +146,6 @@ METHOD_HEADER::index()
     :
     k(0),
     m(0),
-    b(0),
     seed(0),
     canonical(false),
     pthash_constant(0)
@@ -159,7 +157,6 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     m_filenames(build_parameters.input_filenames),
     k(build_parameters.k),
     m(build_parameters.m),
-    b(build_parameters.b),
     seed(build_parameters.seed),
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
@@ -483,7 +480,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         start_time = std::chrono::high_resolution_clock::now();
         
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
+        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+3); //1bit for check
         // TODO: ceil(log2(hf.num_keys())) depends on the number of unique minmer, should depend on the number of distinct colors instead, but should not bug because nb_distinct_colors <= nb_unique_minmers
 
         if (build_parameters.check) {
@@ -503,7 +500,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 auto minimizer = (*itr).second;
                 auto mp_idx = hf(minimizer);
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
-                cid_with_parity = (cid << build_parameters.b) | (minimizer & ((1UL << build_parameters.b)-1)); 
+                cid_with_parity = (cid << 3) | (minimizer & 7);
                 m_map_builder.set(mp_idx, cid_with_parity);
                 ++itr;
             }
