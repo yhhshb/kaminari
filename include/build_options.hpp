@@ -9,6 +9,7 @@ struct options_t {
     std::vector<std::string> input_filenames;
     uint8_t k;
     uint8_t m;
+    uint8_t b;
     uint64_t seed;
     bool canonical;
     double pthash_constant;

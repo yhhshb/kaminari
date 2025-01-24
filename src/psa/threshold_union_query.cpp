@@ -26,9 +26,9 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         for (const auto& record : mms_buffer) { 
             //std::cerr << "record : " << record.itself << "\n";
             uint32_t cid_with_parity = m_map[hf(record.itself)];
-            if ((record.itself & 1) == (cid_with_parity & 1)){
+            if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
-                ccids_counts.push_back(std::make_pair(cid_with_parity >> 1, record.size)); //masking out parity
+                ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
             }
         }
         if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
