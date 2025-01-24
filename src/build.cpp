@@ -75,7 +75,7 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-b", "--bit-check")
         .help("number of bits used to check minmers [0]")
         .scan<'d', size_t>()
-        .default_value(size_t(0));
+        .default_value(size_t(1));
     parser.add_argument("-C", "--check")
         .help("check MPHF correctness")
         .implicit_value(true)

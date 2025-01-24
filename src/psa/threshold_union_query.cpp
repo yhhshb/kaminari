@@ -24,7 +24,6 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         std::vector<::minimizer::record_t> mms_buffer;
         contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            //std::cerr << "record : " << record.itself << "\n";
             uint32_t cid_with_parity = m_map[hf(record.itself)];
             if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
@@ -67,7 +66,7 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         else std::cerr << "\tcompute mixed intersection (for a mix of dense and sparse vectors)\n"; 
     }
     if (color_itrs.empty()) return {};
-    if (all_very_dense) return union_dense_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio, contig_kmer_count); // intersect of dense rows
+    if (all_very_dense) return union_dense_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio); // intersect of dense rows
     
     return union_mixed_intersection(std::move(color_itrs), contig_kmer_count*opts.threshold_ratio); // intersect dense and sparse rows
 }
@@ -75,7 +74,7 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers) const noexcept
+METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept
         /* check every complementary (= absent docids from color) and for each color
          where it is absent, remove color_count to its count (because the candidate is absent to this number of kmers)
          at the end, if the candidate has been absent to too many kmers (threshold), it is not chosen

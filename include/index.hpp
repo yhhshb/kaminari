@@ -40,34 +40,11 @@ typedef scored<uint32_t> scored_id;
 
 typedef std::pair<uint64_t, uint32_t> value_t;
 typedef emem::external_memory_vector<value_t> emem_t;
-
-typedef emem::external_memory_vector<uint64_t> emem_minmers;
-struct Depth1Result {
-    emem_minmers minmers;
-    uint32_t docid;
-};
-
-typedef emem::external_memory_vector<std::pair<uint64_t, std::vector<uint32_t>>, false> depthn_result;
-
 typedef emem::external_memory_vector<std::pair<std::vector<uint32_t>, uint64_t>> colors_to_minmer;
 
 struct Function {
     std::function<void()> f; // Actual function
     std::string desc;
-};
-
-// Custom hash function for vector<uint32_t>
-struct VectorHash {
-    std::size_t operator()(std::vector<uint32_t> const& vec) const {
-        std::size_t seed = vec.size();
-        for(auto x : vec) {
-            x = ((x >> 16) ^ x) * 0x45d9f3b;
-            x = ((x >> 16) ^ x) * 0x45d9f3b;
-            x = (x >> 16) ^ x;
-            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        return seed;
-    }
 };
 
 CLASS_HEADER
@@ -82,10 +59,7 @@ class index
         index(const build::options_t& build_parameters);
 
         //following methods are explicitly instantiated in src/psa/
-        std::vector<color_t> query_full_intersection(char const * const q, const std::size_t l, options_t& opts) const noexcept;
-
         std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
-
         std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
         
         void memory_breakdown(std::ostream& out) const noexcept;
@@ -106,28 +80,24 @@ class index
             private:
                 Iterator m_iterator;
         };
-
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
-        void build(const build::options_t& build_parameters);
+
         void worker_thread(
             std::stack<Function>& task_stack,
             std::mutex& task_stack_mutex,
             std::condition_variable& cv,
             std::atomic<uint32_t>& running_task,
-            std::atomic<bool>& all_done,
-            std::mutex& debug_cerr_mutex);
-        void read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex); 
+            std::atomic<bool>& all_done);
+        void read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters); 
+        void build(const build::options_t& build_parameters);
 
 
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
-        std::vector<color_t> full_dense_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
-        std::vector<color_t> full_mixed_intersection(std::vector<typename ColorClasses::row_accessor>&& color_id_itrs) const noexcept;
-
-        std::vector<scored_id> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers) const noexcept;
+        std::vector<scored_id> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
 
-        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold, uint64_t nb_kmers) const noexcept;
+        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         
         std::vector<std::string> m_filenames;
@@ -226,11 +196,6 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
 }
 
 
-
-/*
-Build 2 is a parallel version of build, using a thread pool to read files and merge results.
-*/
-
 // Worker thread function
 CLASS_HEADER
 void
@@ -239,8 +204,7 @@ METHOD_HEADER::worker_thread(
     std::mutex& task_stack_mutex,
     std::condition_variable& cv,
     std::atomic<uint32_t>& running_task,
-    std::atomic<bool>& all_done,
-    std::mutex& debug_cerr_mutex) 
+    std::atomic<bool>& all_done) 
 {
     while (true) {
         Function task;
@@ -271,7 +235,7 @@ METHOD_HEADER::worker_thread(
 // Function to read a file
 CLASS_HEADER
 void 
-METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters, std::mutex& debug_cerr_mutex) {
+METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters) {
     std::size_t total_kmers = 0;
     std::size_t total_mmers = 0;
     std::size_t total_minimizers = 0;
@@ -296,13 +260,7 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& 
         total_kmers += contig_kmer_count;
         total_mmers += contig_mmer_count;
         total_minimizers += mms_buffer.size();
-        if (build_parameters.verbose > 4) {
-            std::lock_guard<std::mutex> lock(debug_cerr_mutex);
-            std::cerr << "\tRead contig:\n" 
-                        << "\t\t" << contig_kmer_count << " k-mers\n"
-                        << "\t\t" << contig_mmer_count << " m-mers\n"
-                        << "\t\t" << mms_buffer.size() << " minimizers\n";
-        }
+
         // duplicates removed during merge
         std::vector<minimizer_t> minimizers;
         for (auto r : mms_buffer) {
@@ -321,15 +279,14 @@ CLASS_HEADER
 void
 METHOD_HEADER::build(const build::options_t& build_parameters)
 {
-    std::cerr << "DEBUG BUILD 3\n";
-
+    //STEP 1 : PARSE FILES =====================================================
+    if (build_parameters.verbose > 0) std::cerr << "Step 1: Parsing " << m_filenames.size() << " files\n";
     auto start_time = std::chrono::high_resolution_clock::now();
     
     //synchro variables
     std::condition_variable cv;
     std::atomic<uint32_t> running_task(0);
     std::atomic<bool> all_done(false);
-    std::mutex debug_cerr_mutex;
 
     std::stack<Function> task_stack;
     std::mutex task_stack_mutex;
@@ -337,18 +294,20 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     std::vector<emem_t> results_storage;
     std::mutex results_mutex;
 
+    
+    //adding pase_file task to a stack of tasks to be picked by threads
     uint32_t doc_id = 0;
     for (const auto& file : m_filenames) {
         task_stack.push( //Function(f, desc)
             {
-                [this, &running_task, file, doc_id, &results_storage, &results_mutex, &cv, &build_parameters, &debug_cerr_mutex]() mutable {
+                [this, &running_task, file, doc_id, &results_storage, &results_mutex, &cv, &build_parameters]() mutable {
                     ++running_task;
                     emem_t result(
                         build_parameters.max_ram * constants::GB / build_parameters.nthreads,
                         build_parameters.tmp_dir, 
                         utils::get_tmp_filename("", "parse_result_doc", doc_id));
 
-                    this->read_file_task(file, doc_id, result, build_parameters, debug_cerr_mutex);
+                    this->read_file_task(file, doc_id, result, build_parameters);
 
                     result.minimize();
                     {
@@ -365,13 +324,13 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     }
 
     
-    // Create worker threads
+    // Create worker threads who will pick tasks if there are any
     std::vector<std::thread> workers;
     for (uint32_t i = 0; i < build_parameters.nthreads; ++i) {
         workers.push_back(std::thread(
             &METHOD_HEADER::worker_thread, 
-            this, std::ref(task_stack), std::ref(task_stack_mutex), std::ref(cv), std::ref(running_task), std::ref(all_done), std::ref(debug_cerr_mutex)
-        ));
+            this, std::ref(task_stack), std::ref(task_stack_mutex), std::ref(cv), std::ref(running_task), std::ref(all_done))
+        );
     }
 
     //wait for all tasks to finish
@@ -398,7 +357,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     // all emem created, filled, sorted, dumped to disk
 
     //STEP 2 : MERGE RESULTS ===================================================
-    
+    if (build_parameters.verbose > 0) std::cerr << "Step 2: Merging results of parsing\n";
     start_time = std::chrono::high_resolution_clock::now();
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
 
@@ -415,12 +374,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         itr_vec.push_back(sa_itr);
     }
 
-    uint64_t smallest;
+
     auto itr = iterators::sorted_merge_iterator(std::move(itr_vec));
     iterators::sorted_merge_iterator<emem_t::const_iterator> end;
 
+    uint64_t smallest;
     while (itr != end){
-
         smallest = (*itr).first;
         std::pair<std::vector<uint32_t>, uint64_t> color_minmer = {{(*itr).second}, smallest};
         ++itr;
@@ -438,7 +397,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     final_result.minimize();
 
-    std::cout << "DEBUG Time for merging: " 
+    std::cerr << "DEBUG Time for merging: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
@@ -465,13 +424,12 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         assert(hf.num_keys() == unique_minmers.size());
         unique_minmers.clear();
 
-        std::cout << "DEBUG Time for MPHF build: " 
+        std::cerr << "DEBUG Time for MPHF build: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
                 << " milliseconds\n";
 
-        std::cerr << "DEBUG End building MPHF\n";
         std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
     }
 
@@ -503,7 +461,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 auto minimizer = (*itr).second;
                 auto mp_idx = hf(minimizer);
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
-                cid_with_parity = (cid << build_parameters.b) | (minimizer & ((1UL << build_parameters.b)-1)); 
+                cid_with_parity = (cid << build_parameters.b) | ( minimizer & ((1UL << build_parameters.b)-1) );
                 m_map_builder.set(mp_idx, cid_with_parity);
                 ++itr;
             }
@@ -514,7 +472,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
     }
 
-    std::cout << "DEBUG Time for dedup + mapping: " 
+    std::cerr << "DEBUG Time for dedup + mapping: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::high_resolution_clock::now() - start_time
                  ).count() 

@@ -196,10 +196,10 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-r", "--ratio")
         .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
         .default_value(std::string("1.0"));
-    parser.add_argument("--ranking") 
-        .help("flag - list of document ids will be ranked according to the number of kmers/doc [default: off]")
-        .default_value(false)   // Default is off
-        .implicit_value(true);   // Enabled when provided
+    parser.add_argument("--no-ranking") 
+        .help("flag - list of document ids will not be ranked according to the number of kmers/doc [default: on]")
+        .default_value(true)   // Default is on (no ranking is done)
+        .implicit_value(false);   // Enabled when provided
     parser.add_argument("-g", "--max-ram")
         .help("RAM limit (GB) [4]")
         .scan<'d', std::size_t>()
@@ -242,7 +242,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
         opts.threshold_ratio = 1;
     }
 
-    opts.ranking = parser.get<bool>("--ranking");
+    opts.ranking = parser.get<bool>("--no-ranking");
     
 
     opts.verbose = parser.get<std::size_t>("--verbose");

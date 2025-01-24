@@ -7,9 +7,6 @@
 #include <iostream>
 #include <thread>
 
-#include "sys/types.h"
-#include "sys/sysinfo.h"
-
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
@@ -41,16 +38,6 @@ ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
  
     return ++result;
 }
-
-int parseLine(char* line);
-uint64_t getTotalVirtualMem();
-uint64_t getVirtualMemUsed();
-int getVirtualMemUsedByProcess();
-uint64_t getTotalPhysMem();
-uint64_t getPhysMemUsed();
-int getPhysMemUsedByProcess();
-void printRAMInfo();
-
 } // namespace kaminari::utils
 
 #endif // KAMINARI_UTILS_HPP
