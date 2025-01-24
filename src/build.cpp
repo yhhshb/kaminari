@@ -57,11 +57,11 @@ argparse::ArgumentParser get_parser()
         .help("temporary directory")
         .default_value(std::string("."));
     parser.add_argument("-g", "--max-ram")
-        .help("RAM limit (GB) [4]")
+        .help("RAM limit (GB)")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(4));
     parser.add_argument("-s", "--seed")
-        .help("random seed [42]")
+        .help("random seed")
         .scan<'d', uint64_t>()
         .default_value(uint64_t(42));
     parser.add_argument("-c", "--pthash-constant")
@@ -73,7 +73,7 @@ argparse::ArgumentParser get_parser()
         .default_value(false)
         .implicit_value(true);
     parser.add_argument("-b", "--bit-check")
-        .help("number of bits used to check minmers [0]")
+        .help("number of bits used to check minmers")
         .scan<'d', size_t>()
         .default_value(size_t(1));
     parser.add_argument("-C", "--check")

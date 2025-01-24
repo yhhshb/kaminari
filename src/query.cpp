@@ -201,7 +201,7 @@ argparse::ArgumentParser get_parser()
         .default_value(true)   // Default is on (no ranking is done)
         .implicit_value(false);   // Enabled when provided
     parser.add_argument("-g", "--max-ram")
-        .help("RAM limit (GB) [4]")
+        .help("RAM limit (GB)")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(4));
     parser.add_argument("-t", "--threads")
