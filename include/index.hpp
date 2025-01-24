@@ -165,6 +165,7 @@ METHOD_HEADER::visit(Visitor& visitor)
     visitor.visit(m_filenames);
     visitor.visit(k);
     visitor.visit(m);
+    visitor.visit(b);
     visitor.visit(seed);
     visitor.visit(canonical);
     visitor.visit(pthash_constant);
