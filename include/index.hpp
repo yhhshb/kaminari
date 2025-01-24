@@ -349,7 +349,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         worker.join();
     }
 
-    std::cerr << "DEBUG Time for parsing: " 
+    std::cerr << "Time for parsing: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
@@ -397,7 +397,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     final_result.minimize();
 
-    std::cerr << "DEBUG Time for merging: " 
+    std::cerr << "Time for merging: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
@@ -424,7 +424,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         assert(hf.num_keys() == unique_minmers.size());
         unique_minmers.clear();
 
-        std::cerr << "DEBUG Time for MPHF build: " 
+        std::cerr << "Time for MPHF build: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
@@ -432,8 +432,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
         std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
     }
-
-    std::cerr << "DEBUG in-between step 3 and 4\n";
 
     //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
     {
@@ -472,14 +470,11 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
     }
 
-    std::cerr << "DEBUG Time for dedup + mapping: " 
+    std::cerr << "Time for dedup + mapping: " 
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::high_resolution_clock::now() - start_time
                  ).count() 
               << " milliseconds\n";
-
-    std::cerr << "DEBUG end mapping\n";
-    std::cerr << "check mem breakdown for thr rest \n";
 
     if (build_parameters.verbose > 0) {
         std::cerr << "Number of ids: " << m_ccs.num_docs() << "\n";
