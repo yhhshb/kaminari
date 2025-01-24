@@ -32,15 +32,16 @@ int main(const argparse::ArgumentParser& parser)
 
 argparse::ArgumentParser get_parser()
 {
-    argparse::ArgumentParser parser("build");
+    argparse::ArgumentParser parser("build", "1.0.0", argparse::default_arguments::help);
     parser.add_description("Build a kaminari index from a list of datasets");
+
     parser.add_argument("-i", "--input-list")
         .help("list of input files")
         .nargs(argparse::nargs_pattern::at_least_one)
         .required();
     parser.add_argument("-o", "--output-filename")
-        .help("output Index")
-        .default_value("");
+        .help("output index filename (\".kaminari\" advised)")
+        .default_value("index.kaminari");
     parser.add_argument("-k")
         .help("k-mer length")
         .scan<'u', std::size_t>()
@@ -49,25 +50,6 @@ argparse::ArgumentParser get_parser()
         .help("minimizer length (must be < k)")
         .scan<'u', std::size_t>()
         .required();
-    parser.add_argument("-t", "--threads")
-        .help("number of threads")
-        .scan<'u', std::size_t>()
-        .default_value(std::size_t(1));
-    parser.add_argument("-d", "--tmp-dir")
-        .help("temporary directory")
-        .default_value(std::string("."));
-    parser.add_argument("-g", "--max-ram")
-        .help("RAM limit (GB)")
-        .scan<'d', std::size_t>()
-        .default_value(std::size_t(4));
-    parser.add_argument("-s", "--seed")
-        .help("random seed")
-        .scan<'d', uint64_t>()
-        .default_value(uint64_t(42));
-    parser.add_argument("-c", "--pthash-constant")
-        .help("PTHash build constant, higher = slower but more space efficient")
-        .scan<'f', double>()
-        .default_value(double(4));
     parser.add_argument("-a", "--canonical")
         .help("canonical minimizers")
         .default_value(false)
@@ -76,6 +58,25 @@ argparse::ArgumentParser get_parser()
         .help("number of bits used to check minmers")
         .scan<'d', size_t>()
         .default_value(size_t(1));
+    parser.add_argument("-d", "--tmp-dir")
+        .help("temporary directory")
+        .default_value(std::string("."));
+    parser.add_argument("-g", "--max-ram")
+        .help("RAM limit (GB)")
+        .scan<'d', std::size_t>()
+        .default_value(std::size_t(4));
+    parser.add_argument("-t", "--threads")
+        .help("number of threads")
+        .scan<'u', std::size_t>()
+        .default_value(std::size_t(1));
+    parser.add_argument("-s", "--seed")
+        .help("murmurhash random seed")
+        .scan<'d', uint64_t>()
+        .default_value(uint64_t(42));
+    parser.add_argument("-c", "--pthash-constant")
+        .help("PTHash build constant, higher = slower but more space efficient")
+        .scan<'f', double>()
+        .default_value(double(4));
     parser.add_argument("-C", "--check")
         .help("check MPHF correctness")
         .implicit_value(true)

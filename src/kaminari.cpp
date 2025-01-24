@@ -6,9 +6,12 @@ using namespace kaminari;
 
 int main(int argc, char* argv[])
 {
+    argparse::ArgumentParser program("kaminari", "1.0.0", argparse::default_arguments::all);
     auto build_parser = build::get_parser();
     auto query_parser = query::get_parser();
-    argparse::ArgumentParser program(argv[0]);
+
+    
+    
     program.add_subparser(build_parser);
     program.add_subparser(query_parser);
     try {
