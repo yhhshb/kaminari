@@ -103,7 +103,7 @@ Run `./kaminari` to see a list of available tools.
 
  + `-x` or `--index` is required. The filepath to the index to be loaded and queried. Usually ends with ".kaminari".
  + `-i` or `--input-list` is required. List of fasta filenames to be queried. If only one file ending with ".list" is provided, it is assumed to be a file of files. Each sequence in the files is going to be queried and the header will be the name of the answer in the output.
- + `-o`. The filename of the output of the queries. Each line is the answer to a query. Answers are in the form of `name number_of_docs doc1 doc2 doc3` if `ranking` is OFF, else `name number_of_docs (doc1, count) (doc2, count) (doc3, count)`. Doc *n* corresponds to the *n*th doc provided for building the index. Default: "kaminari_results.txt"
+ + `-o`. The filename of the output of the queries. Each line is the answer to a query. Answers are in the form of `name \t number_of_docs \t doc1 doc2 doc3` if `ranking` is OFF, else `name \t number_of_docs \t (doc1, count) (doc2, count) (doc3, count)`. Doc *n* corresponds to the *n*th doc provided for building the index. Default: "kaminari_results.txt"
  + `-r` or `--ratio`. The ratio of k-mers needed for a doc to be selected in the answer. Example: if my doc 5 contains (according to the index) 85 k-mers of my query of size 100 k-mers, it is selected. If `ranking` is ON, (5, 85) will be reported. (Reminder: with `k`=31, a query Q has |Q|-`k`+1 k-mers). Default: 1.0 (100% of the kmers)
  + `--no-ranking`. Kaminari returns the ranking by default (i.e. (doc, count) in the result). This can be turned OFF to have the set of answers unsorted.
  + `-d` or `--tmp-dir`. The directory where temporary files are stored. Files are not deleted in case of manual interruption of the execution. Default: "."
@@ -119,20 +119,33 @@ Demo
 
 This short demo shows how to index the 10-genome collection in the folder `example`. The collection can be downloaded by running the script `download_test_datasets.sh` which generates `example/data/salmonella_10`.
 
-We will use the standard value k = 31.
+From `kaminari/example`, run
+
+    ./download_test_datasets.sh
+
+We will use the standard values k = 31 and m = 19.
 
 `kaminari` can take multiple filenames as its `-i` option, for instance from the `build` directory: 
 
-    ./kaminari build -i ../data/salmonella10/SAL_*.fasta.gz -o ../data/salmonella10.kaminari -k 31 -m 19 -d /tmp -t 4 -v 1
+    ./kaminari build -i ../example/data/salmonella10/SAL_*.fasta.gz -o ../example/data/salmonella10.kaminari -k 31 -m 19 -d /tmp -t 1 -v 1
 
 Or, alternatively, a single text file listing the inputs (one input file per line).
-First create a list of filenames (with absolute paths) for the files in `data/salmonella10`.
-From `kaminari/data`, do
+First create a list of filenames (with absolute paths) for the files in `example/data/salmonella10`.
+From `example/data`, do
 
-    find $(pwd)/salmonella10/* > salmonella_10_filenames.txt
+    find $(pwd)/salmonella10/* > salmonella_10_filenames.list
 
 Then, from `kaminari/build`, run
 
-    ./kaminari build -i ../data/salmonella_10_filenames.txt -o ../data/salmonella10.kaminari -k 31 -m 19 -d tmp_dir -t 1 -v 1
+    ./kaminari build -i ../example/data/salmonella_10_filenames.list -o ../example/data/salmonella10.kaminari -k 31 -m 19 -d /tmp -g 4 -t 1 -v 1
 
-in order to build an index that will be serialized to the file `data/salmonella10.kaminari`.
+in order to build an index that will be serialized to the file `example/data/salmonella10.kaminari`.
+
+Now that the index is generated, we can query the presence of a sequence in the documents.
+
+From `kaminari/build`, run
+
+    ./kaminari query -x ../example/data/salmonella10.kaminari -i ../example/one_query.fasta -o ../example/data/one_query_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
+
+You can check the result in `example/data/one_query_result.txt` and see that our query is mainly present in docs 1, 2 and 6, which corresponds to the 2nd, 3rd and 7th line in `example/data/salmonella_10_filenames.list` (start from 0). It is also reported as present in docs 3 and 8 but with a lower count, meaning that a smaller number of kmers are found in the index, but still a high enough number for the threshold we chose (0.8). 
+
