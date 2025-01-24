@@ -1,8 +1,7 @@
 # kaminari
 雷 - kaminari (thunder/lightning)
 
-Kaminari is a *colored compacted de Bruijn graph* approximate index for large-scale matching and color queries, in the same vein as [Fulgor](https://github.com/jermp/fulgor), but powered by [LPHash](https://github.com/jermp/lphash).
-Colors are still pre-computed [GGCAT](https://github.com/algbio/GGCAT). 
+Kaminari is a *minimizer-based* approximate index for large-scale matching and color queries, in the same vein as [Fulgor](https://github.com/jermp/fulgor), but powered by [PTHash](https://github.com/jermp/pthash).
 
 **A pre-print describing how the index works can be found [here (TODO)]().**
 
