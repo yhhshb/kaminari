@@ -153,7 +153,7 @@ METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
     scale.reset();
     //TODO:fix this
     //scale.visit(m_map);
-    out << "The mapping from minimizers to colors weights: " << m_map.bytes() << " Bytes\n";
+    out << "The mapping from minimizers to colors weights: " << m_map.num_bytes() << " Bytes\n";
     //scale.reset();
 }
 
@@ -183,8 +183,7 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
     opts.alpha = 0.97; //was 0.94
     opts.search = pthash::pthash_search_type::add_displacement;
     opts.avg_partition_size = 3000;
-    opts.minimal_output = true;
-    opts.verbose_output = build_parameters.verbose;
+    opts.verbose = (build_parameters.verbose > 0);
     
     opts.ram = build_parameters.max_ram * constants::GB;
     opts.num_threads = build_parameters.nthreads;
@@ -439,7 +438,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         start_time = std::chrono::high_resolution_clock::now();
         
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-        pthash::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
+        bits::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
         // TODO: ceil(log2(hf.num_keys())) depends on the number of unique minmer, should depend on the number of distinct colors instead, but should not bug because nb_distinct_colors <= nb_unique_minmers
 
         if (build_parameters.check) {

@@ -16,7 +16,7 @@ int main(const argparse::ArgumentParser& parser)
     auto opts = check_args(parser);
 
     //load index in mem
-    minimizer::index<color_classes::hybrid, pthash::compact_vector> idx;
+    minimizer::index<color_classes::hybrid, bits::compact_vector> idx;
     {
         std::ifstream in(opts.index_filename, std::ios::binary);
         loader loader(in);
@@ -88,7 +88,7 @@ int main(const argparse::ArgumentParser& parser)
     return 0;
 }
 
-void ranking_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
     auto rg = rparser.getReadGroup();
     std::stringstream ss;
     uint64_t buff_size = 0;
@@ -130,14 +130,14 @@ void ranking_queries(minimizer::index<color_classes::hybrid, pthash::compact_vec
 }
 
 
-void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
-    using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, pthash::compact_vector>::*)(const char*, std::size_t, options_t&) const;
+void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+    using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, bits::compact_vector>::*)(const char*, std::size_t, options_t&) const;
 
    query_fn_t query_algo;
     if (opts.threshold_ratio == 1) { //TODO: remove this, it is a temporary fix (full intersec deleted)
-        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
+        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
     } else {
-        query_algo = &minimizer::index<color_classes::hybrid, pthash::compact_vector>::query_union_threshold;
+        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
     }
 
    auto rg = rparser.getReadGroup();

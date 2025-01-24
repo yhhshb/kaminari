@@ -12,9 +12,9 @@
 
 namespace kaminari::query {
 
-void ranking_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut);
+void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut);
 
-void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& out, std::mutex& ofile_mut);
+void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& out, std::mutex& ofile_mut);
 
 argparse::ArgumentParser get_parser();
 int main(const argparse::ArgumentParser& parser);

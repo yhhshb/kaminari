@@ -8,7 +8,7 @@ namespace minimizer {
 #define CLASS_HEADER template <class ColorClasses, class ColorMapper>
 #define METHOD_HEADER index<ColorClasses, ColorMapper>
 
-template class index<kaminari::color_classes::hybrid, pthash::compact_vector>;
+template class index<kaminari::color_classes::hybrid, bits::compact_vector>;
 
 
 CLASS_HEADER
