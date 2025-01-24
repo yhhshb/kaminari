@@ -5,7 +5,7 @@
 [submodule "bundled/pthash"]
 	path = bundled/pthash
 	url = https://github.com/jermp/pthash.git
-	branch = phobic
+	branch = master
 [submodule "bundled/FQFeeder"]
 	path = bundled/FQFeeder
 	url = https://github.com/rob-p/FQFeeder
