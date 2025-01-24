@@ -30,7 +30,7 @@ if you are using macOS.
 Compiling the code
 ------------------
 
-The code is tested on ~~Linux with `gcc`~~ and on MacOS with `clang`.
+The code is tested on Linux with `gcc` and on MacOS with `clang`.
 To build the code, [`CMake`](https://cmake.org/) is required.
 
 First clone the repository with
