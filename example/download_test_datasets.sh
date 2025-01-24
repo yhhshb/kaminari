@@ -13,9 +13,9 @@ function debian_realpath() {
 
 script_name=$0
 script_full_path=$(dirname $(debian_realpath "$0"))
-lphash_full_path=$(dirname "$script_full_path")
+kaminari_full_path=$(dirname "$script_full_path")
 
-salmonella10_folder="$lphash_full_path/data/salmonella10"
+salmonella10_folder="$kaminari_full_path/data/salmonella10"
 
 mkdir -p $salmonella10_folder
 

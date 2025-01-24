@@ -442,12 +442,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         bits::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
         // TODO: ceil(log2(hf.num_keys())) depends on the number of unique minmer, should depend on the number of distinct colors instead, but should not bug because nb_distinct_colors <= nb_unique_minmers
 
-        if (build_parameters.check) {
-            if (build_parameters.verbose > 0) std::cerr << "map/MPHF of size: " << hf.num_keys() << "\n";
-            for (std::size_t i = 0; i < hf.num_keys(); ++i) 
-                m_map_builder.set(i, (1 << m_map_builder.width()) - 1); //max value with ceil(log2(hf.num_keys())) bits
-        }
-
         uint32_t cid = 0;
         uint32_t cid_with_parity = 0;
 

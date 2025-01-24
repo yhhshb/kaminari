@@ -77,10 +77,6 @@ argparse::ArgumentParser get_parser()
         .help("PTHash build constant, higher = slower but more space efficient")
         .scan<'f', double>()
         .default_value(double(4));
-    parser.add_argument("-C", "--check")
-        .help("check MPHF correctness")
-        .implicit_value(true)
-        .default_value(false);
     parser.add_argument("-v", "--verbose")
         .help("increase output verbosity")
         .scan<'d', std::size_t>()
@@ -117,15 +113,8 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
-    opts.check = parser.get<bool>("--check");
     opts.verbose = parser.get<std::size_t>("--verbose");
 
-    if (opts.check and opts.nthreads != 1) {
-        std::cerr << "[Warning] Checking does not support multi-threading\n";
-    }
-    if (opts.check and opts.k > 32) {
-        throw std::runtime_error("Checking for correctness supports uint64_t k-mers only");
-    }
     if (opts.input_filenames.size() == 1) opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
     return opts;
 }

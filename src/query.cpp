@@ -190,7 +190,7 @@ argparse::ArgumentParser get_parser()
         .required();
     parser.add_argument("-o", "--output-filename")
         .help("query output, for each sequence of each input file, output its color set")
-        .default_value("");
+        .default_value("kaminari_results.txt");
     parser.add_argument("-r", "--ratio")
         .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
         .default_value(std::string("1.0"));
