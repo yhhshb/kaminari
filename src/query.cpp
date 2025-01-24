@@ -179,7 +179,7 @@ void classic_queries(minimizer::index<color_classes::hybrid, pthash::compact_vec
 argparse::ArgumentParser get_parser()
 {
     argparse::ArgumentParser parser("query", "1.0.0", argparse::default_arguments::help);
-    parser.add_description("Query a kaminari index");
+    parser.add_description("Query a kaminari index (query -h for more information)");
 
     parser.add_argument("-x", "--index")
         .help("kaminari index to use")

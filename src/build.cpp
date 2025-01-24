@@ -33,7 +33,7 @@ int main(const argparse::ArgumentParser& parser)
 argparse::ArgumentParser get_parser()
 {
     argparse::ArgumentParser parser("build", "1.0.0", argparse::default_arguments::help);
-    parser.add_description("Build a kaminari index from a list of datasets");
+    parser.add_description("Build a kaminari index from a list of datasets (build -h for more information)");
 
     parser.add_argument("-i", "--input-list")
         .help("list of input files")
