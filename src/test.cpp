@@ -14,7 +14,7 @@
 typedef unsigned __int128 uint128_t;
 
 typedef pthash::build_configuration pthash_opt_t;
-typedef pthash::dense_partitioned_phf<pthash::murmurhash2_64,               pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
+typedef pthash::dense_partitioned_phf<pthash::murmurhash2_128, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
 
 static int print_u128_u(uint128_t u128)
 {
