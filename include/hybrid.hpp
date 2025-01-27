@@ -8,8 +8,6 @@
 #include "../bundled/biolib/include/packed_vector.hpp"
 #include "../bundled/biolib/include/elias_fano.hpp"
 
-// #include "constants.hpp"
-
 namespace kaminari {
 namespace color_classes {
 

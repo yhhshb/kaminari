@@ -3,11 +3,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include <zlib.h>
-extern "C" {
-#include "../bundled/kseq.h"
-}
-#include "compile_constants.tdp"
+
 #include "../bundled/biolib/include/external_memory_vector.hpp"
 #include "../bundled/biolib/include/ordered_unique_sampler.hpp"
 #include "../bundled/biolib/include/iterator/member_iterator.hpp"
@@ -15,7 +11,7 @@ extern "C" {
 #include "../bundled/biolib/include/logtools.hpp"
 #include "../bundled/biolib/include/hash.hpp"
 
-KSEQ_INIT(gzFile, gzread)
+#include "compile_constants.tdp"
 
 namespace kaminari {
 
@@ -31,13 +27,7 @@ namespace constants {
 static const std::size_t MAX_KMER_SIZE = sizeof(kmer_t) * 4;
 static const std::size_t GB = 1000 * 1000 * 1000;
 
-}
-
-namespace util {
-
-std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, uint64_t run_identifier);
-
-} // namespace util
+} // namespace constants
 
 } // namespace kaminari
 

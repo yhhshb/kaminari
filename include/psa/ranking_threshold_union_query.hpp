@@ -1,15 +1,11 @@
-#include "../../include/index.hpp"
-#include "../../include/hybrid.hpp"
-
+#ifndef RANKING_THRESHOLD_UNION_QUERY_HPP
+#define RANKING_THRESHOLD_UNION_QUERY_HPP
 
 namespace kaminari {
 namespace minimizer {
 
 #define CLASS_HEADER template <class ColorClasses, class ColorMapper>
 #define METHOD_HEADER index<ColorClasses, ColorMapper>
-
-template class index<kaminari::color_classes::hybrid, bits::compact_vector>;
-
 
 CLASS_HEADER
 std::vector<scored_id> 
@@ -136,3 +132,5 @@ METHOD_HEADER::ranking_mixed_intersection(std::vector<std::pair<typename ColorCl
 
 } // namespace minimizer
 } // namespace kaminari
+
+#endif // RANKING_THRESHOLD_UNION_QUERY_HPP

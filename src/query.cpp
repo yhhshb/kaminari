@@ -2,14 +2,18 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
-
-#include <chrono>
+#include "../bundled/FQFeeder/include/FastxParser.hpp"
+#include "../include/index.hpp"
+#include "../include/psa/ranking_threshold_union_query.hpp"
+#include "../include/psa/threshold_union_query.hpp"
+#include "../include/hybrid.hpp"
 #include "../include/query.hpp"
-
 
 namespace kaminari::query {
 
 options_t check_args(const argparse::ArgumentParser& parser);
+void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut);
+void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& out, std::mutex& ofile_mut);
 
 int main(const argparse::ArgumentParser& parser) 
 {
@@ -87,94 +91,6 @@ int main(const argparse::ArgumentParser& parser)
 
     return 0;
 }
-
-void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
-    auto rg = rparser.getReadGroup();
-    std::stringstream ss;
-    uint64_t buff_size = 0;
-    constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
-    
-    while (rparser.refill(rg)) {
-        for (auto const& record : rg) {
-            auto ids = idx.ranking_query_union_threshold(record.seq.c_str(), record.seq.size(), opts);
-            std::sort(
-                ids.begin(),
-                ids.end(),
-                [](auto const& x, auto const& y) { return x.score > y.score; }
-            );
-            buff_size += 1;
-
-            ss << record.name << "\t" << ids.size();
-            for (auto c : ids) { ss << "\t(" << c.item << "," << c.score << ")"; }
-            ss << "\n";
-
-            if (buff_size > buff_thresh) {
-                std::string outs = ss.str();
-                ss.str("");
-                ofile_mut.lock();
-                outstream.write(outs.data(), outs.size());
-                ofile_mut.unlock();
-                buff_size = 0;
-            }
-        }
-    }
-    // dump anything left in the buffer
-    if (buff_size > 0) {
-        std::string outs = ss.str();
-        ss.str("");
-        ofile_mut.lock();
-        outstream.write(outs.data(), outs.size());
-        ofile_mut.unlock();
-        buff_size = 0;
-    }
-}
-
-
-void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
-    using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, bits::compact_vector>::*)(const char*, std::size_t, options_t&) const;
-
-   query_fn_t query_algo;
-    if (opts.threshold_ratio == 1) { //TODO: remove this, it is a temporary fix (full intersec deleted)
-        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
-    } else {
-        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
-    }
-
-   auto rg = rparser.getReadGroup();
-   std::stringstream ss;
-   uint64_t buff_size = 0;
-   constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
-
-   while (rparser.refill(rg)) {
-        for (auto const& record : rg) {
-            auto ids = (idx.*query_algo)(record.seq.c_str(), record.seq.size(), opts);
-            buff_size += 1;
-
-            ss << record.name << "\t" << ids.size();
-            for (auto c : ids) { ss << "\t" << c; }
-            ss << "\n";
-
-            if (buff_size > buff_thresh) {
-                std::string outs = ss.str();
-                ss.str("");
-                ofile_mut.lock();
-                outstream.write(outs.data(), outs.size());
-                ofile_mut.unlock();
-                buff_size = 0;
-            }
-        }
-    }
-    // dump anything left in the buffer
-    if (buff_size > 0) {
-        std::string outs = ss.str();
-        ss.str("");
-        ofile_mut.lock();
-        outstream.write(outs.data(), outs.size());
-        ofile_mut.unlock();
-        buff_size = 0;
-    }
-}
-
 
 argparse::ArgumentParser get_parser()
 {
@@ -261,6 +177,92 @@ options_t check_args(const argparse::ArgumentParser& parser)
     }
 
     return opts;
+}
+
+void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+    auto rg = rparser.getReadGroup();
+    std::stringstream ss;
+    uint64_t buff_size = 0;
+    constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
+    
+    while (rparser.refill(rg)) {
+        for (auto const& record : rg) {
+            auto ids = idx.ranking_query_union_threshold(record.seq.c_str(), record.seq.size(), opts);
+            std::sort(
+                ids.begin(),
+                ids.end(),
+                [](auto const& x, auto const& y) { return x.score > y.score; }
+            );
+            buff_size += 1;
+
+            ss << record.name << "\t" << ids.size();
+            for (auto c : ids) { ss << "\t(" << c.item << "," << c.score << ")"; }
+            ss << "\n";
+
+            if (buff_size > buff_thresh) {
+                std::string outs = ss.str();
+                ss.str("");
+                ofile_mut.lock();
+                outstream.write(outs.data(), outs.size());
+                ofile_mut.unlock();
+                buff_size = 0;
+            }
+        }
+    }
+    // dump anything left in the buffer
+    if (buff_size > 0) {
+        std::string outs = ss.str();
+        ss.str("");
+        ofile_mut.lock();
+        outstream.write(outs.data(), outs.size());
+        ofile_mut.unlock();
+        buff_size = 0;
+    }
+}
+
+void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+    using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, bits::compact_vector>::*)(const char*, std::size_t, options_t&) const;
+
+   query_fn_t query_algo;
+    if (opts.threshold_ratio == 1) { //TODO: remove this, it is a temporary fix (full intersec deleted)
+        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
+    } else {
+        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
+    }
+
+   auto rg = rparser.getReadGroup();
+   std::stringstream ss;
+   uint64_t buff_size = 0;
+   constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
+
+   while (rparser.refill(rg)) {
+        for (auto const& record : rg) {
+            auto ids = (idx.*query_algo)(record.seq.c_str(), record.seq.size(), opts);
+            buff_size += 1;
+
+            ss << record.name << "\t" << ids.size();
+            for (auto c : ids) { ss << "\t" << c; }
+            ss << "\n";
+
+            if (buff_size > buff_thresh) {
+                std::string outs = ss.str();
+                ss.str("");
+                ofile_mut.lock();
+                outstream.write(outs.data(), outs.size());
+                ofile_mut.unlock();
+                buff_size = 0;
+            }
+        }
+    }
+    // dump anything left in the buffer
+    if (buff_size > 0) {
+        std::string outs = ss.str();
+        ss.str("");
+        ofile_mut.lock();
+        outstream.write(outs.data(), outs.size());
+        ofile_mut.unlock();
+        buff_size = 0;
+    }
 }
 
 } // namespace kaminari

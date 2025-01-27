@@ -7,15 +7,10 @@
 #include <iostream>
 #include <thread>
 
-#include "stdlib.h"
-#include "stdio.h"
-#include "string.h"
-
 namespace kaminari::utils {
 
 std::vector<std::string> read_filenames(std::string const& filenames_list);
-std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, uint64_t run_identifier);
-std::string get_tmp_filename(const std::string& prefix, uint16_t batch_id, uint16_t depth, std::thread::id tid);
+std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, std::size_t run_identifier);
 
 template<class ForwardIt>
 ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
@@ -38,6 +33,7 @@ ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
  
     return ++result;
 }
+
 } // namespace kaminari::utils
 
 #endif // KAMINARI_UTILS_HPP

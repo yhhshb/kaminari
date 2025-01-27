@@ -17,7 +17,7 @@ read_filenames(std::string const& filenames_list)
     return buffer;
 }
 
-std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, uint64_t run_identifier)
+std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, std::size_t run_identifier)
 {
     std::stringstream filename;
     filename 
@@ -27,16 +27,15 @@ std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& 
     return filename.str();
 }
 
-std::string get_tmp_filename(const std::string& prefix, uint16_t batch_id, uint16_t depth, std::thread::id tid)
-{
-    std::ostringstream oss;
-    oss << tid;  // Convert thread ID to a string representation
-    std::string thread_id_str = oss.str();
+// std::string get_tmp_filename(const std::string& prefix, uint16_t batch_id, uint16_t depth, std::thread::id tid) // FIXME thread::id is not unique, it can be reused by new threads
+// {
+//     std::ostringstream oss;
+//     oss << tid;  // Convert thread ID to a string representation
+//     std::string thread_id_str = oss.str();
 
-    std::stringstream filename;
-    filename 
-    << prefix << "_" << batch_id << "_" << depth << "_" << thread_id_str << ".bin";
-    return filename.str();
-}
+//     std::stringstream filename;
+//     filename << prefix << "_" << batch_id << "_" << depth << "_" << thread_id_str << ".bin";
+//     return filename.str();
+// }
 
 } // namespace util

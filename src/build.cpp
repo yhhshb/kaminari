@@ -1,13 +1,13 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+
+#include "../include/constants.hpp"
 #include "../include/index.hpp"
 #include "../include/hybrid.hpp"
 #include "../include/utils.hpp"
-#include "../include/constants.hpp"
 #include "../include/build_options.hpp"
 #include "../include/build.hpp"
-
 
 namespace kaminari::build {
 

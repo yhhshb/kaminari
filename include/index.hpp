@@ -1,17 +1,18 @@
 #ifndef KAMINARI_INDEX_HPP
 #define KAMINARI_INDEX_HPP
 
+#include <zlib.h>
+extern "C" {
+#include "../bundled/kseq.h"
+}
+
 #include <iostream>
 #include <mutex>
 #include <shared_mutex>
 #include <condition_variable>
 #include <deque>
 #include <stack>
-#include "constants.hpp"
-#include "utils.hpp"
-#include "build_options.hpp"
-#include "query_options.hpp"
-#include "minimizer.hpp"
+
 #include "../bundled/pthash/include/pthash.hpp"
 #include "../bundled/biolib/bundled/prettyprint.hpp"
 #include "../bundled/biolib/include/bit_vector.hpp"
@@ -20,15 +21,19 @@
 #include "../bundled/biolib/include/iterator/sorted_merge_iterator.hpp"
 #include "../bundled/unordered_dense/include/ankerl/unordered_dense.h"
 
-#include <chrono>
+#include "constants.hpp"
+#include "minimizer.hpp"
+#include "utils.hpp"
+#include "build_options.hpp"
+#include "query_options.hpp"
+
+KSEQ_INIT(gzFile, gzread)
 
 namespace kaminari {
 namespace minimizer {
 
-
 #define CLASS_HEADER template <class ColorClasses, class ColorMapper>
 #define METHOD_HEADER index<ColorClasses, ColorMapper>
-
 
 template <typename T>
 struct scored {
@@ -137,8 +142,6 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     build(build_parameters);
 }
 
-
-
 CLASS_HEADER
 void 
 METHOD_HEADER::memory_breakdown(std::ostream& out) const noexcept
@@ -236,9 +239,9 @@ METHOD_HEADER::worker_thread(
 CLASS_HEADER
 void 
 METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters) {
-    std::size_t total_kmers = 0;
-    std::size_t total_mmers = 0;
-    std::size_t total_minimizers = 0;
+    // std::size_t total_kmers = 0;
+    // std::size_t total_mmers = 0;
+    // std::size_t total_minimizers = 0;
     gzFile fp = nullptr;
     kseq_t* seq = nullptr;
     std::vector<::minimizer::record_t> mms_buffer;
@@ -247,7 +250,7 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& 
     seq = kseq_init(fp);
     while (kseq_read(seq) >= 0) {
         std::size_t contig_mmer_count;
-        auto contig_kmer_count = ::minimizer::from_string<hash64>(
+        [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<hash64>(
             seq->seq.s, 
             seq->seq.l, 
             build_parameters.k, 
@@ -257,9 +260,9 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& 
             contig_mmer_count,
             mms_buffer
         );
-        total_kmers += contig_kmer_count;
-        total_mmers += contig_mmer_count;
-        total_minimizers += mms_buffer.size();
+        // total_kmers += contig_kmer_count;
+        // total_mmers += contig_mmer_count;
+        // total_minimizers += mms_buffer.size();
 
         // duplicates removed during merge
         std::vector<minimizer_t> minimizers;
@@ -323,7 +326,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         doc_id++;
     }
 
-    
     // Create worker threads who will pick tasks if there are any
     std::vector<std::thread> workers;
     for (uint32_t i = 0; i < build_parameters.nthreads; ++i) {
@@ -475,9 +477,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         std::cerr << "Number of colors (lists of ids):" << m_ccs.num_color_classes() << "\n";
     } 
 }
-
-
-
 
 #undef CLASS_HEADER
 #undef METHOD_HEADER

@@ -1,15 +1,11 @@
-#include "../../include/index.hpp"
-#include "../../include/hybrid.hpp"
-
-
+#ifndef THRESHOLD_UNION_QUER_HPP
+#define THRESHOLD_UNION_QUER_HPP
 
 namespace kaminari {
 namespace minimizer {
 
 #define CLASS_HEADER template <class ColorClasses, class ColorMapper>
 #define METHOD_HEADER index<ColorClasses, ColorMapper>
-
-template class index<kaminari::color_classes::hybrid, bits::compact_vector>;
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
@@ -137,3 +133,5 @@ METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClas
 
 } // namespace minimizer
 } // namespace kaminari
+
+#endif // THRESHOLD_UNION_QUER_HPP
