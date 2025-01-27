@@ -26,11 +26,11 @@ struct mm_quartet_t {
     }
 
     friend std::ostream& operator<<(std::ostream& os, mm_quartet_t const& other) {
-        return os << other.itself << " " << other.hash << " " << other.id << " " << other.p1 << " "
+        return os << other.itself << " " << other.id << " " << other.p1 << " "
                   << other.size;
-    }
+    } //removed hash from output because __uint128_t not supported
 
-    uint64_t hash;  // minimizer hash
+    __uint128_t hash;  // minimizer hash
     uint64_t id;
     uint64_t itself;  // 2-bit minimizer itself
     uint32_t p1;       // position inside first k-mer of the super-k-mer
@@ -88,9 +88,10 @@ uint64_t from_string(
     kmer_count = 0;
     mm_count = 0;
     z = 0;
+    std::array<uint64_t, 2> hash_output = {0, 0};
 
 
-    for (uint64_t i = 0; i < contig_size; ++i) {
+    for (size_t i = 0; i < contig_size; ++i) {
         //std::cerr << "i " << i << " contig[i] " << contig[i] << "\n";
         c = constants::seq_nt4_table[static_cast<uint8_t>(contig[i])];
         current.clear();
@@ -105,7 +106,9 @@ uint64_t from_string(
                                     "\t\t reverse : " << mm[1] << " = " << bit_to_nuc(mm[1], m) << "\n" <<
                                     "\t\t chosen : " << mm[z] << " = " << bit_to_nuc(mm[z], m) << "\n";*/
                     current.itself = mm[z]; // itself = canonical encoded
-                    current.hash = MinimizerHasher::hash(mm[z], seed);  // insert new hash inside buffer (murmurhash)
+                    hash_output = MinimizerHasher::hash(mm[z], seed);
+                    current.hash = (static_cast<__uint128_t>(hash_output[1]) << 64) | hash_output[0];
+                    //current.hash = MinimizerHasher::hash(mm[z], seed);  // insert new hash inside buffer (murmurhash)
                     //std::cerr << "\t\t hash : " << current.hash << "\n";
                     current.p1 = i - m + 1;  // FIXME this is NOT the position inside the super-k-mer!
                     current.id = mm_count++;

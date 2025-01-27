@@ -3,6 +3,7 @@
 #include <random>
 
 #include "bundled/biolib/include/hash.hpp"
+#include "bundled/biolib/include/external_memory_vector.hpp"
 #include "bundled/pthash/include/pthash.hpp"
 
 #define P10_UINT64 10000000000000000000ULL   /* 19 zeroes */
@@ -55,28 +56,51 @@ pthash_opt_t get_pthash_options(){
 
 
 int main() {
-    hash::double_hash64 hash;
-    auto res = hash("hello", 5);
-
-    __uint128_t hash_128 = (static_cast<__uint128_t>(res[1]) << 64) | res[0];
-    //print_u128_u(hash_128); 
-
-
     std::vector<__uint128_t> minmers;
 
     std::random_device rd;
     std::mt19937_64 gen(rd());
     std::uniform_int_distribution<uint64_t> dis;
-    for (size_t i = 0; i < 2600000000; ++i) {
+    for (size_t i = 0; i < 10; ++i) { //2600000000
         __uint128_t high = dis(gen);
         __uint128_t low = dis(gen);
         minmers.push_back((high << 64) | low);
     }
 
-
-
     pthash_minimizers_mphf_t hf;
     hf.build_in_internal_memory(minmers.begin(), minmers.size(), get_pthash_options());
+
+
+    emem::external_memory_vector<__uint128_t> emem(
+        256ULL * 1000000000,
+        "/tmp", 
+        "final_merge"
+    );
+
+    for (size_t i = 0; i < 2; ++i) {
+        __uint128_t high = dis(gen);
+        __uint128_t low = dis(gen);
+        emem.push_back((high << 64) | low);
+
+        std::cerr << "val pushed  = ";
+        print_u128_u((high << 64) | low);
+        std::cerr << "\n";
+    }
+
+    emem.minimize();
+    std::cerr << "\n\n";
+
+    for (auto it = emem.cbegin(); it != emem.cend(); ++it) {
+        std::cerr << "val = ";
+        print_u128_u(*it);
+        std::cerr << "\n";
+
+        std::cerr << "sup à 2^66 ? " << ((*it) > (__uint128_t{1} << 66)) << "\n";
+    }
+
+    __uint128_t max = std::numeric_limits<__uint128_t>::max();
+
+    print_u128_u(max+1);
 
     return 0;
 }

@@ -16,11 +16,15 @@
 namespace kaminari {
 
 // typedef bit::rs::array<bit_vector, 64, 8, false, false> ranked_bit_vector;
-typedef emem::external_memory_vector<uint32_t, false> emem_colors;
+typedef emem::external_memory_vector<std::pair<__uint128_t, uint32_t>> emem_t;
+typedef emem::external_memory_vector<std::pair<std::vector<uint32_t>, __uint128_t>> colors_to_minmer;
 typedef io::mut_saver saver;
 typedef io::loader loader;
 typedef logging_tools::libra libra;
 typedef hash::hash64 hash64;
+typedef hash::double_hash64 double_hash64;
+
+
 
 namespace constants {
 

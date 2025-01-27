@@ -13,14 +13,14 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
 {
     if (opts.verbose > 1) std::cerr << "step 1: collect color class ids\n";
     if (opts.verbose > 2) std::cerr << "s : " << q << " l : " << l << "\n"; 
-    std::vector<std::pair<std::size_t, uint32_t>> ccids_counts;
+    std::vector<std::pair<std::size_t, color_t>> ccids_counts;
     uint64_t contig_kmer_count; 
     { // collect color class ids
         std::size_t contig_mmer_count;
         std::vector<::minimizer::record_t> mms_buffer;
-        contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
+        contig_kmer_count = ::minimizer::from_string<double_hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            uint32_t cid_with_parity = m_map[hf(record.itself)];
+            color_t cid_with_parity = m_map[hf(record.itself)];
             if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
                 ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
@@ -30,7 +30,7 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
     }
     if (opts.verbose > 3) std::cerr << ccids_counts << "\n";
     if (opts.verbose > 2) std::cerr << "step 2: ids to colors\n";
-    std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>> color_itrs;
+    std::vector<std::pair<typename ColorClasses::row_accessor, color_t>> color_itrs;
     bool all_very_dense = true;
 
 
@@ -70,7 +70,7 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t> 
-METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept
+METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept
         /* check every complementary (= absent docids from color) and for each color
          where it is absent, remove color_count to its count (because the candidate is absent to this number of kmers)
          at the end, if the candidate has been absent to too many kmers (threshold), it is not chosen
@@ -85,7 +85,7 @@ METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClas
     std::vector<uint32_t> counts(filenames_size, 0);
     uint64_t global_count = 0;
 
-    for (uint64_t i = 0; i != vec_size; ++i) {
+    for (size_t i = 0; i != vec_size; ++i) {
         global_count += color_id_itrs[i].second;
         while (color_id_itrs[i].first.comp_value() < filenames_size) { //"<" and not "!=" because in case of color having every docid, comp_val stays -1, in an unsigned int so 2^32-1
             counts[color_id_itrs[i].first.comp_value()] += color_id_itrs[i].second;
@@ -93,7 +93,7 @@ METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClas
         }
     }
 
-    for (uint32_t i = 0; i != filenames_size; ++i) {
+    for (color_t i = 0; i != filenames_size; ++i) {
         if (global_count - counts[i] >= threshold) colors.push_back(i);
     }
 
@@ -103,7 +103,7 @@ METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClas
 
 CLASS_HEADER
 std::vector<typename METHOD_HEADER::color_t>  
-METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept
+METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept
 {
     if (threshold == 0) threshold = 1; //super low values of opts.threshold_ratio
     
@@ -113,14 +113,14 @@ METHOD_HEADER::union_mixed_intersection(std::vector<std::pair<typename ColorClas
 
     std::vector<uint32_t> counts(filenames_size, 0);
 
-    for (uint64_t i = 0; i != vec_size; ++i) {
+    for (size_t i = 0; i != vec_size; ++i) {
         while (color_id_itrs[i].first.value() != filenames_size) {
             counts[color_id_itrs[i].first.value()] += color_id_itrs[i].second;
             color_id_itrs[i].first.next();
         }
     }
 
-    for (uint32_t i = 0; i != filenames_size; ++i) {
+    for (color_t i = 0; i != filenames_size; ++i) {
         if (counts[i] >= threshold) colors.push_back(i);
     }
 

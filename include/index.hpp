@@ -43,10 +43,6 @@ struct scored {
 
 typedef scored<uint32_t> scored_id;
 
-typedef std::pair<uint64_t, uint32_t> value_t;
-typedef emem::external_memory_vector<value_t> emem_t;
-typedef emem::external_memory_vector<std::pair<std::vector<uint32_t>, uint64_t>> colors_to_minmer;
-
 struct Function {
     std::function<void()> f; // Actual function
     std::string desc;
@@ -56,7 +52,7 @@ CLASS_HEADER
 class index
 {
     public:
-        typedef uint64_t minimizer_t;
+        typedef __uint128_t minimizer_t;
         typedef typename ColorClasses::color_t color_t;
         typedef typename kaminari::query::options_t options_t;
 
@@ -74,7 +70,7 @@ class index
 
     private:
         typedef pthash::build_configuration pthash_opt_t;
-        typedef pthash::dense_partitioned_phf<pthash::murmurhash2_64, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
+        typedef pthash::dense_partitioned_phf<pthash::murmurhash2_128, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
 
         template <class Iterator>
         class pthash_input_iterator {
@@ -93,17 +89,17 @@ class index
             std::condition_variable& cv,
             std::atomic<uint32_t>& running_task,
             std::atomic<bool>& all_done);
-        void read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters); 
+        void read_file_task(const std::string& file, color_t doc_id, emem_t& result, const build::options_t& build_parameters); 
         void build(const build::options_t& build_parameters);
 
 
         //following methods are explicitly instantiated in src/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
-        std::vector<scored_id> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
-        std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
+        std::vector<scored_id> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
+        std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
 
-        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
-        std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, uint32_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
+        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
+        std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         
         std::vector<std::string> m_filenames;
         uint8_t k;
@@ -238,7 +234,7 @@ METHOD_HEADER::worker_thread(
 // Function to read a file
 CLASS_HEADER
 void 
-METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& result, const build::options_t& build_parameters) {
+METHOD_HEADER::read_file_task(const std::string& file, color_t doc_id, emem_t& result, const build::options_t& build_parameters) {
     // std::size_t total_kmers = 0;
     // std::size_t total_mmers = 0;
     // std::size_t total_minimizers = 0;
@@ -250,7 +246,7 @@ METHOD_HEADER::read_file_task(const std::string& file, uint32_t doc_id, emem_t& 
     seq = kseq_init(fp);
     while (kseq_read(seq) >= 0) {
         std::size_t contig_mmer_count;
-        [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<hash64>(
+        [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<double_hash64>(
             seq->seq.s, 
             seq->seq.l, 
             build_parameters.k, 
@@ -299,7 +295,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     
     //adding pase_file task to a stack of tasks to be picked by threads
-    uint32_t doc_id = 0;
+    color_t doc_id = 0;
     for (const auto& file : m_filenames) {
         task_stack.push( //Function(f, desc)
             {
@@ -328,7 +324,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     // Create worker threads who will pick tasks if there are any
     std::vector<std::thread> workers;
-    for (uint32_t i = 0; i < build_parameters.nthreads; ++i) {
+    for (size_t i = 0; i < build_parameters.nthreads; ++i) {
         workers.push_back(std::thread(
             &METHOD_HEADER::worker_thread, 
             this, std::ref(task_stack), std::ref(task_stack_mutex), std::ref(cv), std::ref(running_task), std::ref(all_done))
@@ -361,7 +357,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     //STEP 2 : MERGE RESULTS ===================================================
     if (build_parameters.verbose > 0) std::cerr << "Step 2: Merging results of parsing\n";
     start_time = std::chrono::high_resolution_clock::now();
-    ankerl::unordered_dense::set<uint64_t> unique_minmers;
+    ankerl::unordered_dense::set<minimizer_t> unique_minmers;
 
     colors_to_minmer final_result(
         build_parameters.max_ram * constants::GB * 0.75, //leave space for unique_minmers
@@ -380,10 +376,10 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     auto itr = iterators::sorted_merge_iterator(std::move(itr_vec));
     iterators::sorted_merge_iterator<emem_t::const_iterator> end;
 
-    uint64_t smallest;
+    minimizer_t smallest;
     while (itr != end){
         smallest = (*itr).first;
-        std::pair<std::vector<uint32_t>, uint64_t> color_minmer = {{(*itr).second}, smallest};
+        std::pair<std::vector<color_t>, minimizer_t> color_minmer = {{(*itr).second}, smallest};
         ++itr;
         while (itr != end && (*itr).first == smallest) {
             if ((*itr).second != color_minmer.first.back()){
@@ -444,8 +440,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         bits::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
         // TODO: ceil(log2(hf.num_keys())) depends on the number of unique minmer, should depend on the number of distinct colors instead, but should not bug because nb_distinct_colors <= nb_unique_minmers
 
-        uint32_t cid = 0;
-        uint32_t cid_with_parity = 0;
+        color_t cid = 0;
+        color_t cid_with_parity = 0;
 
         auto itr = final_result.cbegin();
         while(itr != final_result.cend()) {
