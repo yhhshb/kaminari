@@ -105,3 +105,22 @@ if (LINUX)
 endif()
 
 #----------------------------- Tests ----------------------------
+
+
+# Add test.cpp as a new executable called test
+add_executable(test src/test.cpp)
+
+# Link necessary libraries to the test executable
+target_link_libraries(test
+  biolib_static
+  argparse
+  fqfeeder
+  PTHASH
+  unordered_dense
+  z
+)
+
+# If on Linux, link the rt library for the test executable as well
+if (LINUX)
+  target_link_libraries(test rt)
+endif()
