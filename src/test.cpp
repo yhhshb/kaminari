@@ -62,14 +62,17 @@ int main() {
     //print_u128_u(hash_128); 
 
 
-    std::vector<uint64_t> minmers;
+    std::vector<__uint128_t> minmers;
 
     std::random_device rd;
     std::mt19937_64 gen(rd());
     std::uniform_int_distribution<uint64_t> dis;
-    for (size_t i = 0; i < (1ULL<<30); ++i) {
-        minmers.push_back(dis(gen));
+    for (size_t i = 0; i < 2600000000; ++i) {
+        __uint128_t high = dis(gen);
+        __uint128_t low = dis(gen);
+        minmers.push_back((high << 64) | low);
     }
+
 
 
     pthash_minimizers_mphf_t hf;
