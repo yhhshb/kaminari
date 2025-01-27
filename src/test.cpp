@@ -1,5 +1,5 @@
 #include <iostream>
-#include <inttypes.h>
+#include <cinttypes>
 #include <random>
 
 #include "bundled/biolib/include/hash.hpp"
@@ -44,8 +44,8 @@ pthash_opt_t get_pthash_options(){
     opts.avg_partition_size = 3000;
     opts.verbose = 2;
     
-    opts.ram = 4ULL * 1000000000;
-    opts.num_threads = 4;
+    opts.ram = 256ULL * 1000000000;
+    opts.num_threads = 32;
     opts.tmp_dir = "/tmp";
 
     opts.dense_partitioning = true;
