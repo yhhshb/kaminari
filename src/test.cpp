@@ -14,9 +14,6 @@
 
 typedef unsigned __int128 uint128_t;
 
-typedef pthash::build_configuration pthash_opt_t;
-typedef pthash::dense_partitioned_phf<pthash::murmurhash2_128, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
-
 static int print_u128_u(uint128_t u128)
 {
     int rc;
@@ -35,6 +32,8 @@ static int print_u128_u(uint128_t u128)
     return rc;
 }
 
+typedef pthash::build_configuration pthash_opt_t;
+typedef pthash::dense_partitioned_phf<pthash::murmurhash2_128, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
 
 pthash_opt_t get_pthash_options(){
     pthash_opt_t opts;
@@ -54,12 +53,11 @@ pthash_opt_t get_pthash_options(){
     return opts;
 }
 
-
 int main() {
     std::vector<__uint128_t> minmers;
-    minmers.reserve(800000000);
+    minmers.reserve(80000000);
 
-    for (size_t i = 0; i < 800000000; ++i) { //2600000000
+    for (size_t i = 0; i < 80000000; ++i) { 
         minmers.push_back(__uint128_t{i});
        
     }
