@@ -88,8 +88,6 @@ uint64_t from_string(
     kmer_count = 0;
     mm_count = 0;
     z = 0;
-    std::array<uint64_t, 2> hash_output = {0, 0};
-
 
     for (size_t i = 0; i < contig_size; ++i) {
         //std::cerr << "i " << i << " contig[i] " << contig[i] << "\n";
@@ -106,9 +104,6 @@ uint64_t from_string(
                                     "\t\t reverse : " << mm[1] << " = " << bit_to_nuc(mm[1], m) << "\n" <<
                                     "\t\t chosen : " << mm[z] << " = " << bit_to_nuc(mm[z], m) << "\n";*/
                     current.itself = mm[z]; // itself = canonical encoded
-                    
-                    //hash_output = MinimizerHasher::hash(mm[z], seed);
-                    //current.hash = (static_cast<__uint128_t>(hash_output[1]) << 64) | hash_output[0];
                     current.hash = MinimizerHasher::hash(mm[z], seed);  // insert new hash inside buffer (murmurhash)
                     //std::cerr << "\t\t hash : " << current.hash << "\n";
                     current.p1 = i - m + 1;  // FIXME this is NOT the position inside the super-k-mer!

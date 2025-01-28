@@ -54,11 +54,11 @@ pthash_opt_t get_pthash_options(){
 }
 
 int main() {
-    std::vector<__uint128_t> minmers;
-    minmers.reserve(80000000);
+    std::vector<uint64_t> minmers;
+    minmers.reserve(2600000000);
 
-    for (size_t i = 0; i < 80000000; ++i) { 
-        minmers.push_back(__uint128_t{i});
+    for (size_t i = 0; i < 2600000000; ++i) { 
+        minmers.push_back(i);
        
     }
 
