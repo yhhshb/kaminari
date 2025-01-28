@@ -59,13 +59,9 @@ int main() {
     std::vector<__uint128_t> minmers;
     minmers.reserve(800000000);
 
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis;
     for (size_t i = 0; i < 800000000; ++i) { //2600000000
-        __uint128_t high = dis(gen);
-        __uint128_t low = dis(gen);
-        minmers.push_back((high << 64) | low);
+        minmers.push_back(__uint128_t{i});
+       
     }
 
     pthash_minimizers_mphf_t hf;
@@ -77,6 +73,11 @@ int main() {
         "/tmp", 
         "final_merge"
     );
+
+
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<uint64_t> dis;
 
     for (size_t i = 0; i < 2; ++i) {
         __uint128_t high = dis(gen);
