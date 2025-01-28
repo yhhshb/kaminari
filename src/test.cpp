@@ -32,12 +32,12 @@ static int print_u128_u(uint128_t u128) {
 
 typedef build_configuration pthash_opt_t;
 
-typedef phobic<xxhash128> pthash_minimizers_mphf_t;
-
-// typedef pthash::dense_partitioned_phf<
-//     pthash::murmurhash2_128,  //
-//     pthash::opt_bucketer,     //
-//     pthash::mono_EF,          //
+typedef phobic<xxhash128> pthash_minimizers_mphf_t;  // this works
+// typedef phobic<murmurhash2_128> pthash_minimizers_mphf_t;  // this works
+// typedef pthash::dense_partitioned_phf<  // this works
+//     xxhash128,                          //
+//     pthash::opt_bucketer,               //
+//     pthash::mono_EF,                    //
 //     true,
 //     pthash::pthash_search_type::add_displacement  //
 //     >
@@ -72,7 +72,9 @@ int main() {
     hf.build_in_internal_memory(minmers.begin(), minmers.size(),
                                 get_pthash_options());
 
-    std::cout << "ALL GOOD!" << std::endl;
+    std::cout << "ALL GOOD: taking "
+              << static_cast<double>(hf.num_bits()) / hf.num_keys()
+              << " bits/key" << std::endl;
 
     // emem::external_memory_vector<__uint128_t> emem(256ULL * 1000000000,
     // "/tmp",
