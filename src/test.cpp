@@ -57,11 +57,12 @@ pthash_opt_t get_pthash_options(){
 
 int main() {
     std::vector<__uint128_t> minmers;
+    minmers.reserve(800000000);
 
     std::random_device rd;
     std::mt19937_64 gen(rd());
     std::uniform_int_distribution<uint64_t> dis;
-    for (size_t i = 0; i < 10; ++i) { //2600000000
+    for (size_t i = 0; i < 800000000; ++i) { //2600000000
         __uint128_t high = dis(gen);
         __uint128_t low = dis(gen);
         minmers.push_back((high << 64) | low);

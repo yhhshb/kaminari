@@ -52,7 +52,7 @@ CLASS_HEADER
 class index
 {
     public:
-        typedef __uint128_t minimizer_t;
+        typedef uint64_t minimizer_t;
         typedef typename ColorClasses::color_t color_t;
         typedef typename kaminari::query::options_t options_t;
 
@@ -70,7 +70,7 @@ class index
 
     private:
         typedef pthash::build_configuration pthash_opt_t;
-        typedef pthash::dense_partitioned_phf<pthash::murmurhash2_128, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
+        typedef pthash::dense_partitioned_phf<pthash::murmurhash2_64, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
 
         template <class Iterator>
         class pthash_input_iterator {
@@ -246,7 +246,7 @@ METHOD_HEADER::read_file_task(const std::string& file, color_t doc_id, emem_t& r
     seq = kseq_init(fp);
     while (kseq_read(seq) >= 0) {
         std::size_t contig_mmer_count;
-        [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<double_hash64>(
+        [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<hash64>(
             seq->seq.s, 
             seq->seq.l, 
             build_parameters.k, 
