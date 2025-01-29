@@ -83,7 +83,7 @@ METHOD_HEADER::union_dense_intersection(std::vector<std::pair<typename ColorClas
     std::size_t filenames_size = m_filenames.size();
 
     std::vector<uint32_t> counts(filenames_size, 0);
-    uint64_t global_count = 0;
+    uint32_t global_count = 0;
 
     for (size_t i = 0; i != vec_size; ++i) {
         global_count += color_id_itrs[i].second;
