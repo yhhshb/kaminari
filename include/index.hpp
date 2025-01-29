@@ -70,7 +70,13 @@ class index
 
     private:
         typedef pthash::build_configuration pthash_opt_t;
-        typedef pthash::dense_partitioned_phf<pthash::murmurhash2_128, pthash::opt_bucketer, pthash::mono_EF, true, pthash::pthash_search_type::add_displacement> pthash_minimizers_mphf_t;
+        typedef pthash::dense_partitioned_phf<  
+            pthash::xxhash128,                         
+            pthash::opt_bucketer,               
+            pthash::mono_EF,                    
+            true,
+            pthash::pthash_search_type::add_displacement>
+        pthash_minimizers_mphf_t;       
 
         template <class Iterator>
         class pthash_input_iterator {
