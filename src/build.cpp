@@ -8,6 +8,7 @@
 #include "../include/utils.hpp"
 #include "../include/build_options.hpp"
 #include "../include/build.hpp"
+#include "../include/compact_vector.hpp"
 
 namespace kaminari::build {
 
@@ -16,7 +17,7 @@ options_t check_args(const argparse::ArgumentParser& parser);
 int main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
-    minimizer::index<color_classes::hybrid, bits::compact_vector> idx(opts);
+    minimizer::index<color_classes::hybrid, kaminari::compact_vector> idx(opts);
     if (opts.verbose) {
         idx.memory_breakdown(std::cerr);
         std::cerr << "\n";

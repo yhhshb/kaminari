@@ -26,6 +26,7 @@ extern "C" {
 #include "utils.hpp"
 #include "build_options.hpp"
 #include "query_options.hpp"
+#include "compact_vector.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -445,7 +446,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         start_time = std::chrono::high_resolution_clock::now();
         
         typename ColorClasses::builder cbuild(m_filenames.size(), build_parameters.verbose);
-        bits::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
+        kaminari::compact_vector::builder m_map_builder(hf.num_keys(), ceil(log2(hf.num_keys()))+build_parameters.b); //1bit for check
         // TODO: ceil(log2(hf.num_keys())) depends on the number of unique minmer, should depend on the number of distinct colors instead, but should not bug because nb_distinct_colors <= nb_unique_minmers
 
         color_t cid = 0;
@@ -468,6 +469,10 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             }
             ++cid;
         }
+
+        //shrink color mapper because we store cids so we only need log2(cid) bits
+        m_map_builder.shrink(ceil(log2(hf.num_keys())) - ceil(log2(cid)));
+
         cbuild.build(m_ccs);
         m_map_builder.build(m_map);
         //compact_vector m_map where m_map[ hf(minmer) ] = color_id 
