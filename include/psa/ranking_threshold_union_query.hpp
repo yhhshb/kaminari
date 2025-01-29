@@ -15,12 +15,14 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
     if (opts.verbose > 2) std::cerr << "s : " << q << " l : " << l << "\n"; 
     std::vector<std::pair<std::uint32_t, uint32_t>> ccids_counts;
     uint64_t contig_kmer_count; 
+
     { // collect color class ids
         std::size_t contig_mmer_count;
         std::vector<::minimizer::record_t> mms_buffer;
         contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
             color_t cid_with_parity = m_map[hf(record.itself)];
+            //std::cerr << record.itself << " -> " << hf(record.itself) << " -> " << cid_with_parity << "\n";
             if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
                 ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
@@ -81,7 +83,7 @@ METHOD_HEADER::ranking_dense_intersection(std::vector<std::pair<typename ColorCl
     std::size_t filenames_size = m_filenames.size();
 
     std::vector<uint32_t> counts(filenames_size, 0);
-    uint64_t global_count = 0;
+    uint32_t global_count = 0;
     
 
     for (size_t i = 0; i != vec_size; ++i) {
@@ -93,7 +95,7 @@ METHOD_HEADER::ranking_dense_intersection(std::vector<std::pair<typename ColorCl
     }
 
     for (color_t i = 0; i != filenames_size; ++i) {
-        if (global_count - counts[i] >= threshold) colors.push_back(scored_id{i, counts[i]});
+        if (global_count - counts[i] >= threshold) colors.push_back(scored_id{i, global_count-counts[i]});
     }
 
     return colors;

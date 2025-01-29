@@ -70,13 +70,15 @@ class index
 
     private:
         typedef pthash::build_configuration pthash_opt_t;
+        //typedef pthash::phobic<pthash::xxhash128> pthash_minimizers_mphf_t; //TODO: not sure about visit yet
         typedef pthash::dense_partitioned_phf<  
-            pthash::xxhash128,                         
+            pthash::xxhash128, //murmurhash2_64                     
             pthash::opt_bucketer,               
             pthash::mono_EF,                    
             true,
-            pthash::pthash_search_type::add_displacement>
-        pthash_minimizers_mphf_t;       
+            pthash::pthash_search_type::add_displacement  
+            >
+            pthash_minimizers_mphf_t;
 
         template <class Iterator>
         class pthash_input_iterator {
@@ -434,7 +436,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                     ).count() 
                 << " milliseconds\n";
 
-        std::cerr << "size of MPHF : " << hf.num_bits()/8 << "\n";
+        std::cerr << "size of MPHF : " << hf.num_bits()/8 << " Bytes\n";
     }
 
     //STEP 4 : LIST DEDUPLICATION + MAPPING ====================================
@@ -449,13 +451,16 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         color_t cid = 0;
         color_t cid_with_parity = 0;
 
+        uint64_t minimizer;
+        uint64_t mp_idx;
+
         auto itr = final_result.cbegin();
         while(itr != final_result.cend()) {
             auto current_color = (*itr).first;
             cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
             while(itr != final_result.cend() and (*itr).first == current_color) {
-                auto minimizer = (*itr).second;
-                auto mp_idx = hf(minimizer);
+                minimizer = (*itr).second;
+                mp_idx = hf(minimizer);
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
                 cid_with_parity = (cid << build_parameters.b) | ( minimizer & ((1UL << build_parameters.b)-1) );
                 m_map_builder.set(mp_idx, cid_with_parity);
