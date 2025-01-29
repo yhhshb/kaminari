@@ -45,11 +45,11 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-k")
         .help("k-mer length")
         .scan<'u', std::size_t>()
-        .required();
+        .default_value(size_t(31));
     parser.add_argument("-m")
         .help("minimizer length (must be < k)")
         .scan<'u', std::size_t>()
-        .required();
+        .default_value(size_t(19));
     parser.add_argument("-a", "--canonical")
         .help("canonical minimizers")
         .default_value(false)

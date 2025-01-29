@@ -85,8 +85,8 @@ Run `./kaminari` to see a list of available tools.
 
  + `-i` or `--input-list` is required. The list of files to index. You can provide multiple fasta/fastq (compressed or not) or one single file of files (which name extension should be ".list").
  + `-o` or `--output-filename`. The path and filename of the created index, base filename is ".". We encourage file extension ".kaminari". Default: index.kaminari
- + `-k` is required. The length of the k-mers (words of length k) that are indexed and queried. Reminder : only the shortest (according to murmurhash) minimizer (m-mer) is indexed for each k-mer. k=31 is a classic value.
- + `-m` is required. The length of the minimizers (see k parameter). k=19 is a classic value.
+ + `-k`. The length of the k-mers (words of length k) that are indexed and queried. Reminder : only the shortest (according to murmurhash) minimizer (m-mer) is indexed for each k-mer. k=31 is a classic value. Default: 31
+ + `-m`. The length of the minimizers (see k parameter). m=19 is a classic value. Default: 19
  + `-a` or `--canonical`. Consider canonical minimizers or not. DNA has two strands with the same information in reverse-complementary forms. Using canonical minimizers means choosing the same representation for both strands, effectively reducing redundancy and factoring the information. Default: OFF
  + `-b` or `--bit-check`. The number of bits used as an additionnal fingerprint for each ColorSetID. Reduce the number of alien k-mers in a negative query but add `b` bits for each unique minimizer indexed in kaminari. Default: 1 
  + `-d` or `--tmp-dir`. The directory where temporary files are stored. Files are not deleted in case of manual interruption of the execution. Default: "."
@@ -104,7 +104,7 @@ Run `./kaminari` to see a list of available tools.
  + `-i` or `--input-list` is required. List of fasta filenames to be queried. If only one file ending with ".list" is provided, it is assumed to be a file of files. Each sequence in the files is going to be queried and the header will be the name of the answer in the output.
  + `-o`. The filename of the output of the queries. Each line is the answer to a query. Answers are in the form of `name \t number_of_docs \t doc1 doc2 doc3` if `ranking` is OFF, else `name \t number_of_docs \t (doc1, count) (doc2, count) (doc3, count)`. Doc *n* corresponds to the *n*th doc provided for building the index. Default: "kaminari_results.txt"
  + `-r` or `--ratio`. The ratio of k-mers needed for a doc to be selected in the answer. Example: if my doc 5 contains (according to the index) 85 k-mers of my query of size 100 k-mers, it is selected. If `ranking` is ON, (5, 85) will be reported. (Reminder: with `k`=31, a query Q has |Q|-`k`+1 k-mers). Default: 1.0 (100% of the kmers)
- + `--no-ranking`. Kaminari returns the ranking by default (i.e. (doc, count) in the result). This can be turned OFF to have the set of answers unsorted.
+ + `--no-ranking`. Kaminari returns the ranking by default (i.e. (doc, count) in the result). This can be turned OFF using this flag to have the set of answers unsorted.
  + `-d` or `--tmp-dir`. The directory where temporary files are stored. Files are not deleted in case of manual interruption of the execution. Default: "."
  + `-g` or `--max-ram`. A maximum amount of memory allocated for kaminari in GB. Kaminari will try to use the maximum amount given by the user for better performances. Default: 4
  + `-t` or `--threads`. The number of threads allocated for kaminari. Kaminari will try to use them all for better performances. Default: 1
