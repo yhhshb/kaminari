@@ -12,6 +12,8 @@ extern "C" {
 #include <condition_variable>
 #include <deque>
 #include <stack>
+#include <sys/stat.h>
+
 
 #include "../bundled/pthash/include/pthash.hpp"
 #include "../bundled/biolib/bundled/prettyprint.hpp"
@@ -99,7 +101,12 @@ class index
             std::atomic<uint32_t>& running_task,
             std::atomic<bool>& all_done);
         void read_file_task(const std::string& file, color_t doc_id, emem_t& result, const build::options_t& build_parameters); 
+        std::vector<minimizer_t> read_color_file(
+            std::string filename, 
+            int nb_colors, 
+            colors_to_minmer& final_result);
         void build(const build::options_t& build_parameters);
+
 
 
         //following methods are explicitly instantiated in src/psa/files
@@ -284,6 +291,76 @@ METHOD_HEADER::read_file_task(const std::string& file, color_t doc_id, emem_t& r
 }
 
 CLASS_HEADER
+std::vector<uint64_t>
+METHOD_HEADER::read_color_file(std::string filename, int nb_colors, colors_to_minmer& final_result){
+    std::cerr << "Reading color file " << filename << "\n";
+    struct stat file_status;
+    stat(filename.c_str(), &file_status);
+    const uint64_t size_bytes  = file_status.st_size;
+    const uint64_t nb_elements  = size_bytes / sizeof(uint64_t);
+
+    uint64_t nb_minmers;
+    uint64_t nb_u64_per_pair;
+
+    if( nb_colors < 64  ){
+        nb_u64_per_pair  = 2;
+        nb_minmers  = nb_elements / nb_u64_per_pair;
+    }else{
+        nb_u64_per_pair  = ((nb_colors + 63) / 64) + 1;
+        nb_minmers  = nb_elements / nb_u64_per_pair;
+    }
+
+    std::vector<minimizer_t> unique_minmers(nb_minmers);
+    uint64_t idx_minmers = 0;
+
+    printf("(II) file size in bytes  : %llu\n", size_bytes);
+    printf("(II) # uint64_t elements : %llu\n", nb_elements);
+    printf("(II) # minimizers        : %llu\n", nb_minmers);
+    printf("(II) # of n_colors       : %d\n",   nb_colors  );
+    printf("(II) # uint64_t/pair : %llu\n", nb_u64_per_pair);
+
+
+    const int64_t _iBuff_ = (nb_u64_per_pair) * 4096;
+    uint64_t *in = new uint64_t[_iBuff_];
+
+    int64_t nb_read = 0;
+
+    FILE *fi = fopen(filename.c_str(), "r");
+
+    while (true){
+        nb_read = fread(in, sizeof(uint64_t), _iBuff_, fi); 
+        if (nb_read == 0) break;
+
+        for(uint64_t j = 0; j < nb_read; j += nb_u64_per_pair ){
+            //iterate over buffers
+            minimizer_t minmer = in[j];
+            unique_minmers[idx_minmers] = minmer;
+            idx_minmers += 1;
+            std::vector<color_t> colors;
+            for(int c = 0; c < nb_u64_per_pair-1; c += 1){
+                //iterate over colors of one minmer
+                uint64_t colors_64 = in[j + c + 1]; //+1 because minmer is first uint64
+
+                for(int x = 0; x < 64; x +=1){
+                    //iterate over 64 bits of one uint64
+                    if( colors_64 & 0x01 ){
+                        const int color = 64 * c + x;
+                        colors.push_back(color);
+                    }
+                    colors_64 >>= 1;
+                }
+            }
+            final_result.push_back(std::make_pair(colors, minmer));
+
+        }
+    }
+
+    delete[] in;
+    fclose(fi);
+    return unique_minmers;
+}
+
+CLASS_HEADER
 void
 METHOD_HEADER::build(const build::options_t& build_parameters)
 {
@@ -291,7 +368,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     if (build_parameters.verbose > 0) std::cerr << "Step 1: Parsing " << m_filenames.size() << " files\n";
     auto start_time = std::chrono::high_resolution_clock::now();
     
-    //synchro variables
+    /* //synchro variables
     std::condition_variable cv;
     std::atomic<uint32_t> running_task(0);
     std::atomic<bool> all_done(false);
@@ -408,7 +485,16 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
-                << " milliseconds\n";
+                << " milliseconds\n"; */
+
+    colors_to_minmer final_result(
+        build_parameters.max_ram * constants::GB * 0.8, 
+        build_parameters.tmp_dir, 
+        utils::get_tmp_filename("", "final_merge", 0)
+    );
+
+    auto unique_minmers = read_color_file(build_parameters.input_filenames[0], 3682, final_result);
+
 
     //STEP 3 : BUILDING MPHF ===================================================
     {
@@ -429,7 +515,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         dup2(backup, 1);
         close(backup);
         assert(hf.num_keys() == unique_minmers.size());
-        unique_minmers.clear();
 
         std::cerr << "Time for MPHF build: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
