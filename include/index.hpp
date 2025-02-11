@@ -43,13 +43,19 @@ struct scored {
     T item;
     uint32_t score;
 };
-
 typedef scored<uint32_t> scored_id;
 
-struct Function {
-    std::function<void()> f; // Actual function
-    std::string desc;
+struct element {
+    uint64_t minmer;    // le minimizer
+    uint64_t* colors; // les couleurs associées
+    int n_blocks;
 };
+
+
+
+
+
+
 
 CLASS_HEADER
 class index
@@ -94,17 +100,12 @@ class index
         };
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
 
-        void worker_thread(
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::condition_variable& cv,
-            std::atomic<uint32_t>& running_task,
-            std::atomic<bool>& all_done);
-        void read_file_task(const std::string& file, color_t doc_id, emem_t& result, const build::options_t& build_parameters); 
-        std::vector<minimizer_t> read_color_file(
-            std::string filename, 
-            int nb_colors, 
-            colors_to_minmer& final_result);
+        
+        uint64_t get_file_size(const std::string& filen);
+        static bool Sgreater_func (const element& e1, const element& e2);
+        static bool Sequal_func (const element& e1, const element& e2);
+        void process(const std::string& ifile, std::vector<element>& buffer, int n_colors);
+
         void build(const build::options_t& build_parameters);
 
 
@@ -210,154 +211,79 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
     return opts;
 }
 
-
-// Worker thread function
 CLASS_HEADER
-void
-METHOD_HEADER::worker_thread(
-    std::stack<Function>& task_stack,
-    std::mutex& task_stack_mutex,
-    std::condition_variable& cv,
-    std::atomic<uint32_t>& running_task,
-    std::atomic<bool>& all_done) 
-{
-    while (true) {
-        Function task;
-        {
-            std::unique_lock<std::mutex> lock(task_stack_mutex);
-            cv.wait(lock, [&]() {
-                return !task_stack.empty() || all_done.load(); 
-            });
-
-            if (all_done.load() && task_stack.empty()) { //all done should be set to 1 only if stack empty but w/e
-                break; // Exit if no tasks and manager is done
-            }
-
-            if (!task_stack.empty()) {
-                running_task++; //already one in task but security (2 tasks running for each task)
-                task = std::move(task_stack.top());
-                task_stack.pop();
-            }
-        }
-        if (task.f) {
-            task.f();
-            running_task--;
-            cv.notify_all();
-        }
-    }
-}
-
-// Function to read a file
-CLASS_HEADER
-void 
-METHOD_HEADER::read_file_task(const std::string& file, color_t doc_id, emem_t& result, const build::options_t& build_parameters) {
-    // std::size_t total_kmers = 0;
-    // std::size_t total_mmers = 0;
-    // std::size_t total_minimizers = 0;
-    gzFile fp = nullptr;
-    kseq_t* seq = nullptr;
-    std::vector<::minimizer::record_t> mms_buffer;
-    if ((fp = gzopen(file.c_str(), "r")) == NULL)
-        throw std::runtime_error("Unable to open input file " + file);
-    seq = kseq_init(fp);
-    while (kseq_read(seq) >= 0) {
-        std::size_t contig_mmer_count;
-        [[maybe_unused]] auto contig_kmer_count = ::minimizer::from_string<hash64>(
-            seq->seq.s, 
-            seq->seq.l, 
-            build_parameters.k, 
-            build_parameters.m, 
-            build_parameters.seed, 
-            build_parameters.canonical,
-            contig_mmer_count,
-            mms_buffer
-        );
-        // total_kmers += contig_kmer_count;
-        // total_mmers += contig_mmer_count;
-        // total_minimizers += mms_buffer.size();
-
-        // duplicates removed during merge
-        std::vector<minimizer_t> minimizers;
-        for (auto r : mms_buffer) {
-            result.push_back(
-                std::make_pair(r.itself, doc_id));
-        }
-        mms_buffer.clear();
-    }
-    if (seq) kseq_destroy(seq);
-    gzclose(fp);
-    fp = nullptr;
-    seq = nullptr;
-}
-
-CLASS_HEADER
-std::vector<uint64_t>
-METHOD_HEADER::read_color_file(std::string filename, int nb_colors, colors_to_minmer& final_result){
-    std::cerr << "Reading color file " << filename << "\n";
+uint64_t METHOD_HEADER::get_file_size(const std::string& filen) {
     struct stat file_status;
-    stat(filename.c_str(), &file_status);
-    const uint64_t size_bytes  = file_status.st_size;
-    const uint64_t nb_elements  = size_bytes / sizeof(uint64_t);
+    if (stat(filen.c_str(), &file_status) < 0) {
+        return -1;
+    }
+    return file_status.st_size;
+}
 
-    uint64_t nb_minmers;
-    uint64_t nb_u64_per_pair;
+CLASS_HEADER
+bool METHOD_HEADER::Sgreater_func (const element& e1, const element& e2)
+{
+    for(int i = 0; i < e1.n_blocks; i += 1){
+        if( e1.colors[i] != e2.colors[i] ){
+            return e1.colors[i] < e2.colors[i];
+        }
+    }
+    return e1.minmer > e2.minmer;
+}
 
-    if( nb_colors < 64  ){
-        nb_u64_per_pair  = 2;
-        nb_minmers  = nb_elements / nb_u64_per_pair;
+CLASS_HEADER
+bool METHOD_HEADER::Sequal_func (const element& e1, const element& e2)
+{
+    for(int i = 0; i < e1.n_blocks; i += 1){
+        if( e1.colors[i] != e2.colors[i] ) return false;
+    }
+    return true;
+}
+
+CLASS_HEADER
+void METHOD_HEADER::process(const std::string& ifile, std::vector<element>& buffer, int n_colors)
+{
+    const uint64_t size_bytes  = get_file_size(ifile);
+    const uint64_t n_elements  = size_bytes / sizeof(uint64_t);
+    uint64_t n_minimizr;
+    uint64_t n_uint64_c;
+
+    if( n_colors < 64  ){
+        n_uint64_c  = 1;
     }else{
-        nb_u64_per_pair  = ((nb_colors + 63) / 64) + 1;
-        nb_minmers  = nb_elements / nb_u64_per_pair;
+        n_uint64_c  = ((n_colors + 63) / 64);
     }
 
-    std::vector<minimizer_t> unique_minmers(nb_minmers);
-    uint64_t idx_minmers = 0;
+    n_minimizr  = n_elements / (1 + n_uint64_c);
 
     printf("(II) file size in bytes  : %llu\n", size_bytes);
-    printf("(II) # uint64_t elements : %llu\n", nb_elements);
-    printf("(II) # minimizers        : %llu\n", nb_minmers);
-    printf("(II) # of n_colors       : %d\n",   nb_colors  );
-    printf("(II) # uint64_t/pair : %llu\n", nb_u64_per_pair);
+    printf("(II) # uint64_t elements : %llu\n", n_elements);
+    printf("(II) # minimizers        : %llu\n", n_minimizr);
+    printf("(II) # of colors         : %d\n",   n_colors  );
+    printf("(II) # uint64_t/colors   : %llu\n", n_uint64_c);
 
+    ////////////////////////////////////////////////////////////////////////////////////
 
-    const int64_t _iBuff_ = (nb_u64_per_pair) * 4096;
-    uint64_t *in = new uint64_t[_iBuff_];
-
-    int64_t nb_read = 0;
-
-    FILE *fi = fopen(filename.c_str(), "r");
-
-    while (true){
-        nb_read = fread(in, sizeof(uint64_t), _iBuff_, fi); 
-        if (nb_read == 0) break;
-
-        for(uint64_t j = 0; j < nb_read; j += nb_u64_per_pair ){
-            //iterate over buffers
-            minimizer_t minmer = in[j];
-            unique_minmers[idx_minmers] = minmer;
-            idx_minmers += 1;
-            std::vector<color_t> colors;
-            for(int c = 0; c < nb_u64_per_pair-1; c += 1){
-                //iterate over colors of one minmer
-                uint64_t colors_64 = in[j + c + 1]; //+1 because minmer is first uint64
-
-                for(int x = 0; x < 64; x +=1){
-                    //iterate over 64 bits of one uint64
-                    if( colors_64 & 0x01 ){
-                        const int color = 64 * c + x;
-                        colors.push_back(color);
-                    }
-                    colors_64 >>= 1;
-                }
-            }
-            final_result.push_back(std::make_pair(colors, minmer));
-
-        }
+    FILE* fi = fopen( ifile.c_str(), "r" );
+    if( fi == NULL )
+    {
+        printf("(EE) An error corrured while openning the file (%s)\n", ifile.c_str());
+        printf("(EE) Error location : %s %d\n", __FILE__, __LINE__);
+        exit( EXIT_FAILURE );
     }
 
-    delete[] in;
-    fclose(fi);
-    return unique_minmers;
+    buffer.resize(n_minimizr);
+    for (int i = 0; i < n_minimizr; i += 1){
+        buffer[i].colors = new uint64_t[n_uint64_c];
+        const int n_minmer_reads = fread(&buffer[i].minmer, sizeof(uint64_t), 1, fi);
+        const int n_colors_reads = fread(buffer[i].colors, sizeof(uint64_t), n_uint64_c, fi);
+        buffer[i].n_blocks = n_uint64_c;
+    }
+
+    
+    fclose( fi );
+
+    std::sort( buffer.begin(), buffer.end(), &Sgreater_func);
 }
 
 CLASS_HEADER
@@ -365,136 +291,23 @@ void
 METHOD_HEADER::build(const build::options_t& build_parameters)
 {
     //STEP 1 : PARSE FILES =====================================================
-    if (build_parameters.verbose > 0) std::cerr << "Step 1: Parsing " << m_filenames.size() << " files\n";
     auto start_time = std::chrono::high_resolution_clock::now();
     
-    /* //synchro variables
-    std::condition_variable cv;
-    std::atomic<uint32_t> running_task(0);
-    std::atomic<bool> all_done(false);
+    std::string sorted_file = "/home/vlevallo/tmp/test_bertrand/result.3682c";
 
-    std::stack<Function> task_stack;
-    std::mutex task_stack_mutex;
+    std::vector<element> sorted_buffer;
+    process(sorted_file, sorted_buffer, m_filenames.size());
 
-    std::vector<emem_t> results_storage;
-    std::mutex results_mutex;
-
-    
-    //adding pase_file task to a stack of tasks to be picked by threads
-    color_t doc_id = 0;
-    for (const auto& file : m_filenames) {
-        task_stack.push( //Function(f, desc)
-            {
-                [this, &running_task, file, doc_id, &results_storage, &results_mutex, &cv, &build_parameters]() mutable {
-                    ++running_task;
-                    emem_t result(
-                        build_parameters.max_ram * constants::GB / build_parameters.nthreads,
-                        build_parameters.tmp_dir, 
-                        utils::get_tmp_filename("", "parse_result_doc", doc_id));
-
-                    this->read_file_task(file, doc_id, result, build_parameters);
-
-                    result.minimize();
-                    {
-                        std::lock_guard<std::mutex> lock(results_mutex);
-                        results_storage.push_back(std::move(result));
-                    }
-                    --running_task;
-                    cv.notify_all(); // Notify manager that a new result is available
-                }, 
-                "read_file_task" //function desc 
-            }
-        );
-        doc_id++;
+    std::vector<minimizer_t> unique_minmers(sorted_buffer.size());
+    for (int i = 0; i < sorted_buffer.size(); i += 1){
+        unique_minmers[i] = sorted_buffer[i].minmer;
     }
 
-    // Create worker threads who will pick tasks if there are any
-    std::vector<std::thread> workers;
-    for (size_t i = 0; i < build_parameters.nthreads; ++i) {
-        workers.push_back(std::thread(
-            &METHOD_HEADER::worker_thread, 
-            this, std::ref(task_stack), std::ref(task_stack_mutex), std::ref(cv), std::ref(running_task), std::ref(all_done))
-        );
-    }
-
-    //wait for all tasks to finish
-    {
-        std::unique_lock<std::mutex> lock(task_stack_mutex);
-        cv.wait(lock, [&]() {
-            return running_task.load() == 0 && task_stack.empty();
-        });
-    }
-
-    // Mark all tasks as done
-    all_done.store(true);
-    cv.notify_all();
-
-    for (auto& worker : workers) {
-        worker.join();
-    }
-
-    std::cerr << "Time for parsing: " 
+    std::cerr << "Time for reading colors + sort them: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
                 << " milliseconds\n";
-    // all emem created, filled, sorted, dumped to disk
-
-    //STEP 2 : MERGE RESULTS ===================================================
-    if (build_parameters.verbose > 0) std::cerr << "Step 2: Merging results of parsing\n";
-    start_time = std::chrono::high_resolution_clock::now();
-    ankerl::unordered_dense::set<minimizer_t> unique_minmers;
-
-    colors_to_minmer final_result(
-        build_parameters.max_ram * constants::GB * 0.75, //leave space for unique_minmers
-        build_parameters.tmp_dir, 
-        utils::get_tmp_filename("", "final_merge", 0)
-    );
-
-
-    std::vector<iterators::standalone_iterator<emem_t::const_iterator>> itr_vec;
-    for (auto& emem : results_storage) {
-        auto sa_itr = iterators::standalone::const_from(emem);
-        itr_vec.push_back(sa_itr);
-    }
-
-
-    auto itr = iterators::sorted_merge_iterator(std::move(itr_vec));
-    iterators::sorted_merge_iterator<emem_t::const_iterator> end;
-
-    minimizer_t smallest;
-    while (itr != end){
-        smallest = (*itr).first;
-        std::pair<std::vector<color_t>, minimizer_t> color_minmer = {{(*itr).second}, smallest};
-        ++itr;
-        while (itr != end && (*itr).first == smallest) {
-            if ((*itr).second != color_minmer.first.back()){
-                //remove duplicates inside 1 file
-                color_minmer.first.push_back((*itr).second);
-            }
-            ++itr;
-        }
-
-        final_result.push_back(color_minmer);
-        unique_minmers.insert(smallest);
-    }
-
-    final_result.minimize();
-
-    std::cerr << "Time for merging: " 
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::high_resolution_clock::now() - start_time
-                    ).count() 
-                << " milliseconds\n"; */
-
-    colors_to_minmer final_result(
-        build_parameters.max_ram * constants::GB * 0.8, 
-        build_parameters.tmp_dir, 
-        utils::get_tmp_filename("", "final_merge", 0)
-    );
-
-    auto unique_minmers = read_color_file(build_parameters.input_filenames[0], 3682, final_result);
-
 
     //STEP 3 : BUILDING MPHF ===================================================
     {
@@ -540,19 +353,43 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         uint64_t minimizer;
         uint64_t mp_idx;
 
-        auto itr = final_result.cbegin();
-        while(itr != final_result.cend()) {
-            auto current_color = (*itr).first;
-            cbuild.add_color_set(current_color.data(), current_color.size()); // only one copy of the color in storage
-            while(itr != final_result.cend() and (*itr).first == current_color) {
-                minimizer = (*itr).second;
+
+        for (int i = 0; i < sorted_buffer.size(); i += 1){
+            //add first time seen color to ColorClasses
+            //was under binary form, need to translate it
+            auto binary_color = sorted_buffer[i].colors;
+            std::vector<color_t> color_list;  
+            for (std::size_t block_idx = 0; block_idx < sorted_buffer[i].n_blocks; ++block_idx) {
+                uint64_t block = binary_color[block_idx];
+                for (std::size_t bit_pos = 0; bit_pos < 64; ++bit_pos) {
+                    if (block & (1ULL << bit_pos)) { 
+                        color_list.push_back(block_idx * 64 + bit_pos);
+                    }
+                }
+            }
+            cbuild.add_color_set(color_list.data(), color_list.size());
+
+            //link minmer to cid
+            minimizer = sorted_buffer[i].minmer;
+            mp_idx = hf(minimizer);
+            cid_with_parity = (cid << build_parameters.b) | ( minimizer & ((1UL << build_parameters.b)-1) );
+            m_map_builder.set(mp_idx, cid_with_parity);
+
+            while (i+1 < sorted_buffer.size() and Sequal_func(sorted_buffer[i], sorted_buffer[i+1])){
+                //ignore redundant color
+                i += 1;
+                //link minmer to cid
+                minimizer = sorted_buffer[i].minmer;
                 mp_idx = hf(minimizer);
-                // std::cerr << minimizer << " -> " << mp_idx << "\n";
                 cid_with_parity = (cid << build_parameters.b) | ( minimizer & ((1UL << build_parameters.b)-1) );
                 m_map_builder.set(mp_idx, cid_with_parity);
-                ++itr;
             }
-            ++cid;
+
+            cid += 1;
+        }
+
+        for (int i = 0; i < sorted_buffer.size(); i++) {
+            delete[] sorted_buffer[i].colors; 
         }
 
         //shrink color mapper because we store cids so we only need log2(cid) bits
