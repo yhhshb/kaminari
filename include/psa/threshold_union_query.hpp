@@ -20,8 +20,8 @@ METHOD_HEADER::query_union_threshold(char const * const q, const std::size_t l, 
         std::vector<::minimizer::record_t> mms_buffer;
         contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            color_t cid_with_parity = m_map[hf(record.itself)];
-            if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
+            color_t cid_with_parity = m_map[hf(record.hash)];
+            if ((record.hash & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
                 ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
             }

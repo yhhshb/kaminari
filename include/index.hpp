@@ -101,7 +101,7 @@ class index
         pthash_opt_t get_pthash_options(const build::options_t& build_parameters);
 
         
-        uint64_t get_file_size(const std::string& filen);
+        uint64_t get_file_size(const std::string& filen) const;
         static bool Sgreater_func (const element& e1, const element& e2);
         static bool Sequal_func (const element& e1, const element& e2);
         void process(const std::string& ifile, std::vector<element>& buffer, int n_colors);
@@ -212,7 +212,7 @@ METHOD_HEADER::get_pthash_options(const build::options_t& build_parameters)
 }
 
 CLASS_HEADER
-uint64_t METHOD_HEADER::get_file_size(const std::string& filen) {
+uint64_t METHOD_HEADER::get_file_size(const std::string& filen) const {
     struct stat file_status;
     if (stat(filen.c_str(), &file_status) < 0) {
         return -1;
@@ -293,7 +293,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     //STEP 1 : PARSE FILES =====================================================
     auto start_time = std::chrono::high_resolution_clock::now();
     
-    std::string sorted_file = "/home/vlevallo/tmp/test_bertrand/result.3682c";
+    std::string sorted_file = "/home/vlevallo/tmp/test_bertrand/result.4c";
 
     std::vector<element> sorted_buffer;
     process(sorted_file, sorted_buffer, m_filenames.size());

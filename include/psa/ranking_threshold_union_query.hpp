@@ -21,14 +21,15 @@ METHOD_HEADER::ranking_query_union_threshold(char const * const q, const std::si
         std::vector<::minimizer::record_t> mms_buffer;
         contig_kmer_count = ::minimizer::from_string<hash64>(q, l, k, m, seed, canonical, contig_mmer_count, mms_buffer);
         for (const auto& record : mms_buffer) { 
-            color_t cid_with_parity = m_map[hf(record.itself)];
-            //std::cerr << record.itself << " -> " << hf(record.itself) << " -> " << cid_with_parity << "\n";
-            if ((record.itself & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
+            color_t cid_with_parity = m_map[hf(record.hash)];
+            //std::cerr << record.hash << " -> " << record.size << " -> " << hf(record.hash) << " -> " << cid_with_parity << "\n";
+            if ((record.hash & ((1UL << b)-1)) == (cid_with_parity & ((1UL << b)-1))){
                 //checkin not alien kmer
                 ccids_counts.push_back(std::make_pair(cid_with_parity >> b, record.size)); //masking out parity
             }
-            
         }
+
+
         if (opts.verbose > 3) std::cerr << "query contains " << contig_kmer_count << " k-mers and " << contig_mmer_count << " m-mers\n";
     }
     if (opts.verbose > 3) std::cerr << ccids_counts << "\n";
