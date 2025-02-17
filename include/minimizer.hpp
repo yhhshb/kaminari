@@ -7,12 +7,24 @@
 
 namespace minimizer {
 
+const std::array<uint8_t, 256> seq_nt5_table = {
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 0, 4, 1, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 0, 4, 1, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+};
+
 #pragma pack(push, 2)
 struct record_t {
     uint64_t itself;
     uint64_t id;
     uint32_t p1;
     uint32_t size;
+    uint64_t hash;
 };
 #pragma pack(pop)
 
@@ -30,7 +42,7 @@ struct mm_quartet_t {
                   << other.size;
     } //removed hash from output because __uint128_t not supported
 
-    __uint128_t hash;  // minimizer hash
+    uint64_t hash;  // minimizer hash
     uint64_t id;
     uint64_t itself;  // 2-bit minimizer itself
     uint32_t p1;       // position inside first k-mer of the super-k-mer
@@ -63,7 +75,7 @@ uint64_t from_string(
     bool find_brand_new_min = false;
 
     auto update_output = [](decltype(accumulator)& accumulator, mm_quartet_t const& added) {
-        accumulator.push_back({added.itself, added.id, added.p1, added.size});
+        accumulator.push_back({added.itself, added.id, added.p1, added.size, added.hash});
     };
 
     [[maybe_unused]] auto bit_to_nuc = [](uint64_t bits, uint32_t len) {
@@ -91,7 +103,7 @@ uint64_t from_string(
 
     for (size_t i = 0; i < contig_size; ++i) {
         //std::cerr << "i " << i << " contig[i] " << contig[i] << "\n";
-        c = constants::seq_nt4_table[static_cast<uint8_t>(contig[i])];
+        c = seq_nt5_table[static_cast<uint8_t>(contig[i])];
         current.clear();
         if (c < 4) [[likely]] { //a t c or g (caps or not)
                 mm[0] = (mm[0] << 2 | c) & mask;            // forward m-mer

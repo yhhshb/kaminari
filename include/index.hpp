@@ -273,7 +273,7 @@ METHOD_HEADER::read_file_task(const std::string& file, color_t doc_id, emem_t& r
         std::vector<minimizer_t> minimizers;
         for (auto r : mms_buffer) {
             result.push_back(
-                std::make_pair(r.itself, doc_id));
+                std::make_pair(r.hash, doc_id));
         }
         mms_buffer.clear();
     }
