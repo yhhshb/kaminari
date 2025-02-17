@@ -107,7 +107,8 @@ uint64_t from_string(
         current.clear();
         if (c < 4) [[likely]] { //a t c or g (caps or not)
                 mm[0] = (mm[0] << 2 | c) & mask;            // forward m-mer
-                mm[1] = (mm[1] >> 2) | (3ULL ^ c) << shift; // reverse m-mer
+                mm[1] = (mm[1] >> 2) | (2ULL ^ c) << shift; // reverse, case T == 2
+                //mm[1] = (mm[1] >> 2) | (3ULL ^ c) << shift; // reverse, case T == 3
                 if (canonical_m_mers && mm[0] != mm[1]) z = mm[0] < mm[1] ? 0 : 1;  // strand, if symmetric k-mer then use previous strand
                 ++nbases_since_last_break;
                 if (nbases_since_last_break >= m) { //at least size of minmer (m)
