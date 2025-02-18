@@ -293,10 +293,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     //STEP 1 : PARSE FILES =====================================================
     auto start_time = std::chrono::high_resolution_clock::now();
     
-    std::string sorted_file = "/home/vlevallo/tmp/test_bertrand/result.4c";
-
     std::vector<element> sorted_buffer;
-    process(sorted_file, sorted_buffer, m_filenames.size());
+    process(build_parameters.breizhminmer, sorted_buffer, m_filenames.size());
 
     std::vector<minimizer_t> unique_minmers(sorted_buffer.size());
     for (int i = 0; i < sorted_buffer.size(); i += 1){

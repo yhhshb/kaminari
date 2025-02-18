@@ -7,6 +7,7 @@
 namespace kaminari::build {
 struct options_t {
     std::vector<std::string> input_filenames;
+    std::string breizhminmer;
     uint8_t k;
     uint8_t m;
     uint8_t b;

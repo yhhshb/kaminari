@@ -43,6 +43,9 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-o", "--output-filename")
         .help("output index filename (\".kaminari\" advised)")
         .default_value("index.kaminari");
+    parser.add_argument("-f", "--Breizhminmer")
+        .help("input color filename")
+        .default_value("result.3682c");
     parser.add_argument("-k")
         .help("k-mer length")
         .scan<'u', std::size_t>()
@@ -115,6 +118,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
     opts.verbose = parser.get<std::size_t>("--verbose");
+    opts.breizhminmer = parser.get<std::string>("-f");
 
     if (opts.input_filenames.size() == 1) opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
     return opts;
