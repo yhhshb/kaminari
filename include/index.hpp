@@ -367,6 +367,51 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     if (build_parameters.verbose > 0) std::cerr << "Step 2: Merging results of parsing\n";
     start_time = std::chrono::high_resolution_clock::now();
     ankerl::unordered_dense::set<minimizer_t> unique_minmers;
+    std::vector<minimizer_t> unique_minimizers;
+
+
+    /* std::vector<minimizer_t> v1;
+    std::vector<minimizer_t> v2;
+
+    auto& emem = results_storage[0];
+    auto itr1 = emem.cbegin();
+    while(itr1 != emem.cend()) {
+        v1.push_back((*itr1).first);
+        ++itr1;
+    }
+    std::sort(v1.begin(), v1.end());
+    v1.erase(std::unique(v1.begin(), v1.end()), v1.end());
+    std::cerr << v1.size() << " minimizers in file 1\n";
+
+    auto& emem2 = results_storage[1];
+    auto itr2 = emem2.cbegin();
+    while(itr2 != emem2.cend()) {
+        v2.push_back((*itr2).first);
+        ++itr2;
+    }
+    std::sort(v2.begin(), v2.end());
+    v2.erase(std::unique(v2.begin(), v2.end()), v2.end());
+    std::cerr << v2.size() << " minimizers in file 2\n";
+
+    for (auto elem : v1) {
+        unique_minimizers.push_back(elem);
+    }
+    for (auto elem : v2) {
+        unique_minimizers.push_back(elem);
+    }
+
+
+    std::cerr << unique_minimizers.size() << " minimizers pre merge\n";
+    std::sort(unique_minimizers.begin(), unique_minimizers.end());
+    unique_minimizers.erase(std::unique(unique_minimizers.begin(), unique_minimizers.end()), unique_minimizers.end());
+    std::cerr << unique_minimizers.size() << " minimizers post merge\n";
+    exit(0); */
+
+
+
+
+
+
 
     colors_to_minmer final_result(
         build_parameters.max_ram * constants::GB * 0.75, //leave space for unique_minmers
@@ -400,6 +445,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
         final_result.push_back(color_minmer);
         unique_minmers.insert(smallest);
+        unique_minimizers.push_back(smallest);
     }
 
     final_result.minimize();
@@ -412,6 +458,18 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     //STEP 3 : BUILDING MPHF ===================================================
     {
+        std::cerr << "test : size of vector : " << unique_minimizers.size() << "\n";
+        uint64_t last = 0;
+        for (auto elem : unique_minimizers) {
+            if (elem < last) {
+                std::cerr << "not sorted\n";
+                break;
+            }
+            last = elem;
+        }
+        FILE* f = fopen("/home/vlevallo/tmp/test_bertrand/result_inte", "w" );
+        fwrite(unique_minimizers.data(), sizeof(uint64_t), unique_minimizers.size(), f);
+
         if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
         start_time = std::chrono::high_resolution_clock::now();
         //auto pt_itr = pthash_input_iterator<decltype(unique_minimizers)::const_iterator>(unique_minimizers.cbegin());

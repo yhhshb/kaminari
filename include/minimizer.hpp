@@ -75,6 +75,7 @@ uint64_t from_string(
     bool find_brand_new_min = false;
 
     auto update_output = [](decltype(accumulator)& accumulator, mm_quartet_t const& added) {
+        //std::cerr << "add minmer " << added.hash << "\n";
         accumulator.push_back({added.itself, added.id, added.p1, added.size, added.hash});
     };
 
@@ -122,9 +123,9 @@ uint64_t from_string(
                     current.p1 = i - m + 1;  // FIXME this is NOT the position inside the super-k-mer!
                     current.id = mm_count++;
                     if (nbases_since_last_break == k) ++kmer_count;
-                    if (nbases_since_last_break == k + 1) [[unlikely]] {  
+                    if (nbases_since_last_break == k+1){
                         // happens once, after seeing all the m-mers of the first kmer, time to check which one is the smallest (the minmer)
-                        //std::cerr << "unlikely bases_since_last_break == k + 1\n";
+                        //std::cerr << "unlikely bases_since_last_break == k\n";
                         min_pos = p1 = 0;
                         //smallest minmer according to murmurhash
                         for (std::size_t j = 0; j < buffer.size(); ++j) {
@@ -137,8 +138,8 @@ uint64_t from_string(
                         //std::cerr << "=== Smallest minmer hash = " <<  buffer[p1].hash << " itself : " << buffer[p1].itself << " which corresponds to " << tmp << "\n";
                         sks = 1; // number of k-mers after a break is 1
                     }
-                    if (nbases_since_last_break >= k + 1) [[likely]] {  // time to update the minimum, if necessary
-                        //std::cerr << "likely bases_since_last_break >= k + 1\n";
+                    if (nbases_since_last_break >= k+1) {  // time to update the minimum, if necessary
+                        //std::cerr << "likely bases_since_last_break >= k\n";
                         assert(sks != 0);
                         assert(sks <= k - m + 1); //sks is number of kmer in the superkmer
                         if (((buf_pos) % buffer.size()) == min_pos) {  // old minimum outside window, time to save it and go next
@@ -186,6 +187,16 @@ uint64_t from_string(
                 }
             }
         else [[unlikely]] { // N or other character
+            if (nbases_since_last_break == k) {  // contig.length == 1kmer
+                min_pos = p1 = 0;
+                sks = 1;
+                for (std::size_t j = 0; j < buffer.size(); ++j) {
+                    if (buffer[j].hash < buffer[min_pos].hash) {
+                        min_pos = j;
+                        p1 = min_pos;
+                    }
+                }
+            }
             nbases_since_last_break = 0;
             if (min_pos < buffer.size()) {
                 buffer[min_pos].p1 = p1;
