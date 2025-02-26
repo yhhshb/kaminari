@@ -111,6 +111,9 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
+    auto allocated = get_file_size(m_filenames[0]);
+    allocated = (allocated/1024/1024 < 10) ? 16 : 1024; // 16MB for bacteria/small genomes, 1GB for other genomes
+
     if (build_parameters.fof_filename != "") {
         std::string build_dir = utils::getExecutablePath();
         std::string command = 
@@ -118,7 +121,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             "/BreiZHMinimizer" + 
             " -f " + build_parameters.fof_filename +
             " -t " + std::to_string(build_parameters.nthreads) +
-            " --MB 1024";
+            " --MB " + std::to_string(allocated);
         system(command.c_str());
     } else {
         std::cerr << "(EE) Please use a file of files if --metagenome is not used\n";
