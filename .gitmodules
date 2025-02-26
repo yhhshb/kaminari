@@ -12,3 +12,7 @@
 [submodule "bundled/unordered_dense"]
 	path = bundled/unordered_dense
 	url = https://github.com/martinus/unordered_dense.git
+[submodule "bundled/Minimizers"]
+	path = bundled/Minimizers
+	url = https://github.com/blegal/Minimizers.git
+	branch = victor

@@ -79,6 +79,8 @@ add_subdirectory(bundled/unordered_dense)
 # Add pthash as a subdirectory
 add_subdirectory(bundled/pthash)
 
+add_subdirectory(bundled/Minimizers)
+
 # pthash includes
 target_include_directories(kaminari PRIVATE
     ${PROJECT_SOURCE_DIR}/bundled/pthash

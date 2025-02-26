@@ -3,7 +3,9 @@
 #include <fstream>
 
 #include "../include/constants.hpp"
-#include "../include/index.hpp"
+#include "../include/index/index.hpp"
+#include "../include/index/index_build.hpp"
+#include "../include/index/index_build_metage.hpp"
 #include "../include/hybrid.hpp"
 #include "../include/utils.hpp"
 #include "../include/build_options.hpp"
@@ -43,9 +45,6 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-o", "--output-filename")
         .help("output index filename (\".kaminari\" advised)")
         .default_value("index.kaminari");
-    parser.add_argument("-f", "--Breizhminmer")
-        .help("input color filename")
-        .default_value("result.3682c");
     parser.add_argument("-k")
         .help("k-mer length")
         .scan<'u', std::size_t>()
@@ -56,6 +55,10 @@ argparse::ArgumentParser get_parser()
         .default_value(size_t(19));
     parser.add_argument("-a", "--canonical")
         .help("canonical minimizers")
+        .default_value(false)
+        .implicit_value(true);
+    parser.add_argument("--metagenome")
+        .help("recommended for big (>1000docs) metagenomic data collection")
         .default_value(false)
         .implicit_value(true);
     parser.add_argument("-b", "--bit-check")
@@ -117,10 +120,15 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
+    opts.metagenome = parser.get<bool>("--metagenome");
     opts.verbose = parser.get<std::size_t>("--verbose");
-    opts.breizhminmer = parser.get<std::string>("-f");
 
-    if (opts.input_filenames.size() == 1) opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
+    if (opts.input_filenames.size() == 1){
+        opts.fof_filename = opts.input_filenames.at(0);
+        opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
+    } else {
+        opts.fof_filename = "";
+    }
     return opts;
 }
 

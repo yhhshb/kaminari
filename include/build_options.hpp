@@ -6,20 +6,19 @@
 
 namespace kaminari::build {
 struct options_t {
+    std::string fof_filename;
     std::vector<std::string> input_filenames;
-    std::string breizhminmer;
     uint8_t k;
     uint8_t m;
     uint8_t b;
     uint64_t seed;
     bool canonical;
     double pthash_constant;
-    // machine-dependent options
     std::string output_filename;
     std::string tmp_dir;
     uint8_t nthreads;
     std::size_t max_ram;
-    bool check;
+    bool metagenome;
     std::size_t verbose;
 };
 } // namespace kaminari::build

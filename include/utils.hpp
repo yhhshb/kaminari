@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <iostream>
 #include <thread>
+#include <unistd.h>
+#include <limits.h>
 
 namespace kaminari::utils {
 
@@ -33,6 +35,9 @@ ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
  
     return ++result;
 }
+
+
+std::string getExecutablePath();
 
 } // namespace kaminari::utils
 

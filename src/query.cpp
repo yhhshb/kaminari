@@ -3,7 +3,7 @@
 #include <fstream>
 #include <thread>
 #include "../bundled/FQFeeder/include/FastxParser.hpp"
-#include "../include/index.hpp"
+#include "../include/index/index.hpp"
 #include "../include/psa/ranking_threshold_union_query.hpp"
 #include "../include/psa/threshold_union_query.hpp"
 #include "../include/hybrid.hpp"

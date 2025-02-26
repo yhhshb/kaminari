@@ -27,6 +27,16 @@ std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& 
     return filename.str();
 }
 
+std::string getExecutablePath() {
+    char result[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+    if (count != -1) {
+        result[count] = '\0';
+        return std::string(result).substr(0, std::string(result).find_last_of("/"));;
+    }
+    return "";
+}
+
 // std::string get_tmp_filename(const std::string& prefix, uint16_t batch_id, uint16_t depth, std::thread::id tid) // FIXME thread::id is not unique, it can be reused by new threads
 // {
 //     std::ostringstream oss;
