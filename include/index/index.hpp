@@ -47,7 +47,7 @@ typedef scored<uint32_t> scored_id;
 struct element { //for build()
     uint64_t minmer;    // le minimizer
     uint64_t* colors; // les couleurs associées
-    int n_blocks;
+    size_t n_blocks;
 };
 
 struct Function { //for build_metage()

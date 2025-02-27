@@ -48,9 +48,10 @@ uint64_t from_string(
     // PREMIER M-MER
     uint64_t current_mmer = 0;
     uint64_t cur_inv_mmer = 0;
-    int cnt = 0;
+    uint64_t canon;
+    size_t cnt = 0;
 
-    for(int x = 0; x < m - 1; x += 1)
+    for(uint32_t x = 0; x < m - 1; x += 1)
     {
         // Encode les nucleotides du premier s-mer
         const uint64_t encoded = ((contig[cnt] >> 1) & 0b11);
@@ -75,14 +76,11 @@ uint64_t from_string(
         cur_inv_mmer >>= 2;
         cur_inv_mmer |= ( (0x2 ^ encoded) << (2 * (m - 1))); // cf Yoann
         
-        const uint64_t canon  = (current_mmer < cur_inv_mmer) ? current_mmer : cur_inv_mmer;
-        /* const uint64_t canon  = canonical_m_mers ? 
-            (
-                (current_mmer < cur_inv_mmer) ? 
-                    current_mmer 
-                    : cur_inv_mmer
-            ) 
-            : current_mmer; */
+        if (canonical_m_mers){
+            canon  = (current_mmer < cur_inv_mmer) ? current_mmer : cur_inv_mmer;
+        } else {
+            canon  = current_mmer;
+        }
 
         const uint64_t s_hash = MinimizerHasher::hash(canon, seed);
         buffer[m_pos]         = s_hash; // on memorise le hash du mmer
@@ -103,14 +101,11 @@ uint64_t from_string(
         cur_inv_mmer >>= 2;
         cur_inv_mmer |= ( (0x2 ^ encoded) << (2 * (m - 1))); 
         
-        const uint64_t canon  = (current_mmer < cur_inv_mmer) ? current_mmer : cur_inv_mmer;
-        /* const uint64_t canon  = canonical_m_mers ? 
-            (
-                (current_mmer < cur_inv_mmer) ? 
-                    current_mmer 
-                    : cur_inv_mmer
-            ) 
-            : current_mmer; */
+        if (canonical_m_mers){
+            canon  = (current_mmer < cur_inv_mmer) ? current_mmer : cur_inv_mmer;
+        } else {
+            canon  = current_mmer;
+        }
 
         const uint64_t s_hash = MinimizerHasher::hash(canon, seed);
         minv                  = (s_hash < minv) ? s_hash : minv;

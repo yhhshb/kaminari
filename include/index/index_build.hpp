@@ -21,7 +21,7 @@ uint64_t METHOD_HEADER::get_file_size(const std::string& filen) const {
 CLASS_HEADER
 bool METHOD_HEADER::Sgreater_func (const element& e1, const element& e2)
 {
-    for(int i = 0; i < e1.n_blocks; i += 1){
+    for(size_t i = 0; i < e1.n_blocks; i += 1){
         if( e1.colors[i] != e2.colors[i] ){
             return e1.colors[i] < e2.colors[i];
         }
@@ -32,7 +32,7 @@ bool METHOD_HEADER::Sgreater_func (const element& e1, const element& e2)
 CLASS_HEADER
 bool METHOD_HEADER::Sequal_func (const element& e1, const element& e2)
 {
-    for(int i = 0; i < e1.n_blocks; i += 1){
+    for(size_t i = 0; i < e1.n_blocks; i += 1){
         if( e1.colors[i] != e2.colors[i] ) return false;
     }
     return true;
@@ -55,11 +55,11 @@ void METHOD_HEADER::process(const std::string& ifile, std::vector<element>& min_
     n_minimizr  = n_elements / (1 + n_uint64_c);
     min_col.resize(n_minimizr);
 
-    printf("(II) file size in bytes  : %llu\n", size_bytes);
-    printf("(II) # uint64_t elements : %llu\n", n_elements);
-    printf("(II) # minimizers        : %llu\n", n_minimizr);
+    printf("(II) file size in bytes  : %lu\n", size_bytes);
+    printf("(II) # uint64_t elements : %lu\n", n_elements);
+    printf("(II) # minimizers        : %lu\n", n_minimizr);
     printf("(II) # of colors         : %d\n",   n_colors  );
-    printf("(II) # uint64_t/colors   : %llu\n", n_uint64_c);
+    printf("(II) # uint64_t/colors   : %lu\n", n_uint64_c);
 
     ////////////////////////////////////////////////////////////////////////////////////
 
@@ -74,22 +74,22 @@ void METHOD_HEADER::process(const std::string& ifile, std::vector<element>& min_
     }
 
     int cnt = 0;
-    uint64_t n_data = fread(buffer, sizeof(uint64_t), 4096, fi);
+    fread(buffer, sizeof(uint64_t), 4096, fi);
     
-    for (int i = 0; i < n_minimizr; i += 1){
+    for (size_t i = 0; i < n_minimizr; i += 1){
         min_col[i].minmer = buffer[cnt];
         cnt += 1;
         if (cnt == 4096){
-            n_data = fread(buffer, sizeof(uint64_t), 4096, fi);
+            fread(buffer, sizeof(uint64_t), 4096, fi);
             cnt = 0;
         }
 
         min_col[i].colors = new uint64_t[n_uint64_c];
-        for (int j = 0; j < n_uint64_c; j += 1){
+        for (uint64_t j = 0; j < n_uint64_c; j += 1){
             min_col[i].colors[j] = buffer[cnt];
             cnt += 1;
             if (cnt == 4096){
-                n_data = fread(buffer, sizeof(uint64_t), 4096, fi);
+                fread(buffer, sizeof(uint64_t), 4096, fi);
                 cnt = 0;
             }
         }
@@ -133,7 +133,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     process(Bzhminmer_file, sorted_min_cols, m_filenames.size());
 
     ankerl::unordered_dense::set<minimizer_t> unique_minmers;
-    for (int i = 0; i < sorted_min_cols.size(); i += 1){
+    for (size_t i = 0; i < sorted_min_cols.size(); i += 1){
         unique_minmers.insert(sorted_min_cols[i].minmer);
     }
 
@@ -189,7 +189,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         uint64_t mp_idx;
 
 
-        for (int i = 0; i < sorted_min_cols.size(); i += 1){
+        for (size_t i = 0; i < sorted_min_cols.size(); i += 1){
             //add first time seen color to ColorClasses
             //was under binary form, need to translate it
             auto binary_color = sorted_min_cols[i].colors;
@@ -223,7 +223,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             cid += 1;
         }
 
-        for (int i = 0; i < sorted_min_cols.size(); i++) {
+        for (size_t i = 0; i < sorted_min_cols.size(); i++) {
             delete[] sorted_min_cols[i].colors; 
         }
 
