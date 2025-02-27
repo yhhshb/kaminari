@@ -89,6 +89,7 @@ Run `./kaminari` to see a list of available tools.
  + `-m`. The length of the minimizers (see k parameter). m=19 is a classic value. Default: 19
  + `-a` or `--canonical`. Consider canonical minimizers or not. DNA has two strands with the same information in reverse-complementary forms. Using canonical minimizers means choosing the same representation for both strands, effectively reducing redundancy and factoring the information. Default: OFF
  + `-b` or `--bit-check`. The number of bits used as an additionnal fingerprint for each ColorSetID. Reduce the number of alien k-mers in a negative query but add `b` bits for each unique minimizer indexed in kaminari. Default: 1 
+ + `--metagenome`. Modifies the strategy of encoding colors during merging step. Recommanded in case of sparse colors, i.e. very complex data (metagenomics) combined with a large collection (>1000 metagenomic docs) Default: OFF
  + `-d` or `--tmp-dir`. The directory where temporary files are stored. Files are not deleted in case of manual interruption of the execution. Default: "."
  + `-g` or `--max-ram`. A maximum amount of memory allocated for kaminari in GB. Kaminari will try to use the maximum amount given by the user for better performances. Default: 4
  + `-t` or `--threads`. The number of threads allocated for kaminari. Kaminari will try to use them all for better performances. Default: 1
