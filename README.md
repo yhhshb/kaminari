@@ -122,33 +122,22 @@ This short demo shows how to index the 10-genome collection in the folder `examp
 From `kaminari/example`, run
 
     ./download_test_datasets.sh
+    find $(pwd)/data/salmonella10/* > salmonella_10_filenames.list
 
 We will use the standard values k = 31 and m = 19.
 
-`kaminari` can take multiple filenames as its `-i` option, for instance from the `build` directory: 
+`kaminari` can take a single text file listing the inputs (one input file per line) as its `-i` option, for instance from the `build` directory: 
 
-    ./kaminari build -i ../example/data/salmonella10/SAL_*.fasta.gz -o ../example/data/salmonella10.kaminari -k 31 -m 19 -d /tmp -t 1 -v 1
-
-Or, alternatively, a single text file listing the inputs (one input file per line).
-First create a list of filenames (with absolute paths) for the files in `example/data/salmonella10`.
-From `example/data`, do
-
-    cd data
-    find $(pwd)/salmonella10/* > salmonella_10_filenames.list
-
-Then, from `kaminari/build`, run
-
-    cd ../../build
-    ./kaminari build -i ../example/data/salmonella_10_filenames.list -o ../example/data/salmonella10.kaminari -k 31 -m 19 -d /tmp -g 4 -t 1 -v 1
-
-in order to build an index that will be serialized to the file `example/data/salmonella10.kaminari`.
+    ./kaminari build -i ../example/salmonella_10_filenames.list -o ../example/salmonella10.kaminari -k 31 -m 19 -d /tmp -g 4 -t 1 -v 1
+    
+in order to build an index that will be serialized to the file `example/salmonella10.kaminari`.
 
 Now that the index is generated, we can query the presence of a sequence in the documents.
 
 From `kaminari/build`, run
 
-    ./kaminari query -x ../example/data/salmonella10.kaminari -i ../example/one_query.fasta -o ../example/data/one_query_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
+    ./kaminari query -x ../example/salmonella10.kaminari -i ../example/one_query.fasta -o ../example/data/one_query_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
     cat ../example/data/one_query_result.txt
 
-You can check the result in `example/data/one_query_result.txt` and see that our query is mainly present in docs 1, 2 and 6, which corresponds to the 2nd, 3rd and 7th line in `example/data/salmonella_10_filenames.list` (start from 0). It is also reported as present in docs 3 and 8 but with a lower count, meaning that a smaller number of kmers are found in the index, but still a high enough number for the threshold we chose (0.8). 
+You can check the result in `example/data/one_query_result.txt` and see that our query is mainly present in docs 1, 2 and 6, which corresponds to the 2nd, 3rd and 7th line in `example/salmonella_10_filenames.list` (start from 0). It is also reported as present in docs 3 and 8 but with a lower count, meaning that a smaller number of kmers are found in the index, but still a high enough number for the threshold we chose (0.8). 
 
