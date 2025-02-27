@@ -136,8 +136,8 @@ Now that the index is generated, we can query the presence of a sequence in the 
 
 From `kaminari/build`, run
 
-    ./kaminari query -x ../example/salmonella10.kaminari -i ../example/one_query.fasta -o ../example/data/one_query_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
+    ./kaminari query -x ../example/salmonella10.kaminari -i ../example/one_query.fasta -o ../example/one_query_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
     cat ../example/data/one_query_result.txt
 
-You can check the result in `example/data/one_query_result.txt` and see that our query is mainly present in docs 1, 2 and 6, which corresponds to the 2nd, 3rd and 7th line in `example/salmonella_10_filenames.list` (start from 0). It is also reported as present in docs 3 and 8 but with a lower count, meaning that a smaller number of kmers are found in the index, but still a high enough number for the threshold we chose (0.8). 
+You can check the result in `example/one_query_result.txt` and see that our query is mainly present in docs 1, 2 and 6, which corresponds to the 2nd, 3rd and 7th line in `example/salmonella_10_filenames.list` (start from 0). It is also reported as present in docs 3 and 8 but with a lower count, meaning that a smaller number of kmers are found in the index, but still a high enough number for the threshold we chose (0.8). 
 
