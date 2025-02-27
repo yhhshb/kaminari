@@ -128,7 +128,7 @@ We will use the standard values k = 31 and m = 19.
 
 `kaminari` can take a single text file listing the inputs (one input file per line) as its `-i` option, for instance from the `build` directory: 
 
-    ./kaminari build -i ../example/salmonella_10_filenames.list -o ../example/salmonella10.kaminari -k 31 -m 19 -d /tmp -g 4 -t 1 -v 1
+    ./kaminari build -i ../example/salmonella_10_filenames.list -o ../example/salmonella10.kaminari -k 31 -m 19 -a -d /tmp -g 4 -t 1 -v 1
     
 in order to build an index that will be serialized to the file `example/salmonella10.kaminari`.
 
@@ -136,8 +136,8 @@ Now that the index is generated, we can query the presence of a sequence in the 
 
 From `kaminari/build`, run
 
-    ./kaminari query -x ../example/salmonella10.kaminari -i ../example/one_query.fasta -o ../example/one_query_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
-    cat ../example/data/one_query_result.txt
+    ./kaminari query -x ../example/salmonella10.kaminari -i ../example/two_queries.fasta -o ../example/two_queries_result.txt -r 0.8 -d /tmp -g 4 -t 4 -v 1
+    cat ../example/two_queries_result.txt
 
-You can check the result in `example/one_query_result.txt` and see that our query is mainly present in docs 1, 2 and 6, which corresponds to the 2nd, 3rd and 7th line in `example/salmonella_10_filenames.list` (start from 0). It is also reported as present in docs 3 and 8 but with a lower count, meaning that a smaller number of kmers are found in the index, but still a high enough number for the threshold we chose (0.8). 
+You can check the result in `example/two_queries_result.txt` and see that the first sequence is mainly present in docs 0, 3, 7 and 8 which corresponds to the 1st, 4th, 8th and 9th lines in `example/salmonella_10_filenames.list` (start from 0). The second sequence is reported for all 10 documents, but note how only documents 0,4,7,8 have the maximal count. The other ones share less k-mers with the sequence, but still over 80% (`-r 0.8`), so we report them.
 
