@@ -5,3 +5,4 @@ debug_build
 mphfs
 tmp
 data
+example/salmonella*
