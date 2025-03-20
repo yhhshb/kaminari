@@ -216,6 +216,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
             while (i+1 < sorted_min_cols.size() and Sequal_func(sorted_min_cols[i], sorted_min_cols[i+1])){
                 //ignore redundant color
+                colorset_sizes.push_back(color_list.size());
                 i += 1;
                 //link minmer to cid
                 minimizer = sorted_min_cols[i].minmer;
