@@ -188,6 +188,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         uint64_t minimizer;
         uint64_t mp_idx;
 
+        std::vector<uint64_t> colorset_sizes;
+
 
         for (size_t i = 0; i < sorted_min_cols.size(); i += 1){
             //add first time seen color to ColorClasses
@@ -203,6 +205,8 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
                 }
             }
             cbuild.add_color_set(color_list.data(), color_list.size());
+
+            colorset_sizes.push_back(color_list.size());
 
             //link minmer to cid
             minimizer = sorted_min_cols[i].minmer;
@@ -226,6 +230,10 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         for (size_t i = 0; i < sorted_min_cols.size(); i++) {
             delete[] sorted_min_cols[i].colors; 
         }
+
+        FILE* f = fopen("/WORKS/vlevallois/expes_kaminari/stats/colorset_sizes.txt", "w");
+        fwrite(colorset_sizes.data(), sizeof(uint64_t), colorset_sizes.size(), f);
+        fclose(f);
 
         //shrink color mapper because we store cids so we only need log2(cid) bits
         m_map_builder.shrink(ceil(log2(hf.num_keys())) - ceil(log2(cid)));
