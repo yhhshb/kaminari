@@ -117,7 +117,7 @@ Run `./kaminari` to see a list of available tools.
 Demo
 ----
 
-This short demo shows how to index the 10-genome collection in the folder `example`. The collection can be downloaded by running the script `download_test_datasets.sh` which generates `example/data/salmonella_10`.
+This short demo shows how to index the 10-genome collection in the folder `example`. The collection can be downloaded by running the script `download_test_datasets.sh` which generates `example/data/salmonella10/`.
 
 From `kaminari/example`, run
 
