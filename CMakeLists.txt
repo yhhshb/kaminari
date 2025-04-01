@@ -28,6 +28,7 @@ if (UNIX)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
   if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-unused-function -Wno-unknown-attributes")
   endif()
@@ -60,6 +61,7 @@ set(KAMINARI_SOURCES
   src/utils.cpp
   src/build.cpp
   src/query.cpp
+  src/rbo.cpp
   src/hybrid.cpp
 )
 
@@ -79,7 +81,7 @@ add_subdirectory(bundled/unordered_dense)
 # Add pthash as a subdirectory
 add_subdirectory(bundled/pthash)
 
-add_subdirectory(bundled/Minimizers)
+
 
 # pthash includes
 target_include_directories(kaminari PRIVATE
@@ -91,7 +93,9 @@ target_include_directories(kaminari PRIVATE
 
 add_dependencies(kaminari biolib_static) # lphash_static
 
-target_link_libraries(kaminari
+add_subdirectory(bundled/Minimizers)
+
+target_link_libraries(kaminari PRIVATE
   biolib_static
   argparse
   fqfeeder
@@ -101,10 +105,12 @@ target_link_libraries(kaminari
 )
 
 if (LINUX)
-  target_link_libraries(kaminari
+  target_link_libraries(kaminari PRIVATE
     rt
   )
 endif()
+
+target_link_libraries(kaminari PRIVATE BreiZHMinimizerLib)
 
 #----------------------------- Tests ----------------------------
 

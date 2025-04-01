@@ -1,7 +1,7 @@
 #ifndef INDEX_BUILD_HPP
 #define INDEX_BUILD_HPP
 
-#include <cstdlib>  // For system()
+#include "../../bundled/Minimizers/include/BreiZHMinimizer.hpp"
 
 namespace kaminari {
 namespace minimizer {
@@ -107,29 +107,17 @@ void
 METHOD_HEADER::build(const build::options_t& build_parameters)
 {
     //STEP 1 : PARSE FILES =====================================================
-    if (build_parameters.verbose > 0) std::cerr << "Step 1: parsing " << build_parameters.input_filenames.size() << " files and merging results\n";
+    if (build_parameters.verbose > 0) std::cerr << "Step 1 & 2: parsing " << build_parameters.input_filenames.size() << " files and merging results\n";
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     auto allocated = get_file_size(m_filenames[0]);
     allocated = (allocated/1024/1024 < 10) ? 16 : 1024; // 16MB for bacteria/small genomes, 1GB for other genomes
 
-    if (build_parameters.fof_filename != "") {
-        std::string build_dir = utils::getExecutablePath();
-        std::string command = 
-            build_dir + 
-            "/BreiZHMinimizer" + 
-            " -f " + build_parameters.fof_filename +
-            " -t " + std::to_string(build_parameters.nthreads) +
-            " --MB " + std::to_string(allocated);
-        system(command.c_str());
-    } else {
-        std::cerr << "(EE) Please use a file of files if --metagenome is not used\n";
-        exit(EXIT_FAILURE);
-    }
-    
+    generate_minimizers(build_parameters.input_filenames, build_parameters.tmp_dir, build_parameters.nthreads, allocated, build_parameters.k, build_parameters.m, build_parameters.verbose);
+
+    std::string Bzhminmer_file = build_parameters.tmp_dir + "/result." + std::to_string(build_parameters.input_filenames.size()) + "c";
     std::vector<element> sorted_min_cols;
-    std::string Bzhminmer_file = "result." + std::to_string(build_parameters.input_filenames.size()) + "c";
     process(Bzhminmer_file, sorted_min_cols, m_filenames.size());
 
     ankerl::unordered_dense::set<minimizer_t> unique_minmers;
@@ -137,9 +125,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         unique_minmers.insert(sorted_min_cols[i].minmer);
     }
 
-    std::cerr << "Number of unique minimizers after sorting and before MPHF: " << unique_minmers.size() << std::endl;
-
-    std::cerr << "Time for reading colors + sort them: " 
+    std::cerr << "Time for reading minimizers + sort them: " 
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::high_resolution_clock::now() - start_time
                     ).count() 
@@ -188,9 +174,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         uint64_t minimizer;
         uint64_t mp_idx;
 
-        std::vector<uint64_t> colorset_sizes;
-
-
         for (size_t i = 0; i < sorted_min_cols.size(); i += 1){
             //add first time seen color to ColorClasses
             //was under binary form, need to translate it
@@ -206,8 +189,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
             }
             cbuild.add_color_set(color_list.data(), color_list.size());
 
-            colorset_sizes.push_back(color_list.size());
-
             //link minmer to cid
             minimizer = sorted_min_cols[i].minmer;
             mp_idx = hf(minimizer);
@@ -216,7 +197,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
 
             while (i+1 < sorted_min_cols.size() and Sequal_func(sorted_min_cols[i], sorted_min_cols[i+1])){
                 //ignore redundant color
-                colorset_sizes.push_back(color_list.size());
                 i += 1;
                 //link minmer to cid
                 minimizer = sorted_min_cols[i].minmer;
@@ -231,10 +211,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
         for (size_t i = 0; i < sorted_min_cols.size(); i++) {
             delete[] sorted_min_cols[i].colors; 
         }
-
-        FILE* f = fopen("/WORKS/vlevallois/expes_kaminari/stats/colorset_sizes.txt", "w");
-        fwrite(colorset_sizes.data(), sizeof(uint64_t), colorset_sizes.size(), f);
-        fclose(f);
 
         //shrink color mapper because we store cids so we only need log2(cid) bits
         m_map_builder.shrink(ceil(log2(hf.num_keys())) - ceil(log2(cid)));

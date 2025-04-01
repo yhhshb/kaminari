@@ -6,7 +6,6 @@
 
 namespace kaminari::build {
 struct options_t {
-    std::string fof_filename;
     std::vector<std::string> input_filenames;
     uint8_t k;
     uint8_t m;

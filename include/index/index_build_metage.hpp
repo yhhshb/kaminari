@@ -259,7 +259,6 @@ METHOD_HEADER::build_metage(const build::options_t& build_parameters)
         uint64_t minimizer;
         uint64_t mp_idx;
 
-        std::vector<uint64_t> colorset_sizes;
 
         auto itr = final_result.cbegin();
         while(itr != final_result.cend()) {
@@ -271,15 +270,10 @@ METHOD_HEADER::build_metage(const build::options_t& build_parameters)
                 // std::cerr << minimizer << " -> " << mp_idx << "\n";
                 cid_with_parity = (cid << build_parameters.b) | ( minimizer & ((1UL << build_parameters.b)-1) );
                 m_map_builder.set(mp_idx, cid_with_parity);
-                colorset_sizes.push_back(current_color.size());
                 ++itr;
             }
             ++cid;
         }
-
-        FILE* f = fopen("/WORKS/vlevallois/expes_kaminari/stats/colorset_sizes.txt", "w");
-        fwrite(colorset_sizes.data(), sizeof(uint64_t), colorset_sizes.size(), f);
-        fclose(f);
 
         //shrink color mapper because we store cids so we only need log2(cid) bits
         m_map_builder.shrink(ceil(log2(hf.num_keys())) - ceil(log2(cid)));

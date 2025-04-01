@@ -124,10 +124,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.verbose = parser.get<std::size_t>("--verbose");
 
     if (opts.input_filenames.size() == 1){
-        opts.fof_filename = opts.input_filenames.at(0);
         opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
-    } else {
-        opts.fof_filename = "";
     }
     return opts;
 }
