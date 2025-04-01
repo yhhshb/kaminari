@@ -119,6 +119,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     std::string Bzhminmer_file = build_parameters.tmp_dir + "/result." + std::to_string(build_parameters.input_filenames.size()) + "c";
     std::vector<element> sorted_min_cols;
     process(Bzhminmer_file, sorted_min_cols, m_filenames.size());
+    std::remove(Bzhminmer_file.c_str()); // delete file
 
     ankerl::unordered_dense::set<minimizer_t> unique_minmers;
     for (size_t i = 0; i < sorted_min_cols.size(); i += 1){
