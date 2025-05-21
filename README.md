@@ -3,7 +3,7 @@
 
 Kaminari is a *minimizer-based* approximate index for large-scale matching and color queries, in the same vein as [Fulgor](https://github.com/jermp/fulgor), but powered by [PTHash](https://github.com/jermp/pthash).
 
-**A pre-print describing how the index works can be found [here (TODO)]().**
+**A pre-print describing how the index works can be found [here](https://www.biorxiv.org/content/10.1101/2025.05.16.654317v1).**
 
 ### Table of contents
 * [Dependencies](#dependencies)
