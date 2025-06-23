@@ -16,12 +16,14 @@ struct options_t {
     std::string file2;
     std::string output_filename;
     bool raw_lists;
+    int min_size;
 };
 
 options_t check_args(const argparse::ArgumentParser& parser);
 double RBO(const std::vector<int>& A, const std::vector<int>& B, double p);
 double RBO_MIN(const std::vector<int>& A, const std::vector<int>& B, double p);
 double RBO_weight(double p, int d);
+double find_p(double target_weight, double target_proportion_of_R, int len_R, double eps = 0.01);
 
 int main(const argparse::ArgumentParser& parser) 
 {
@@ -104,13 +106,16 @@ int main(const argparse::ArgumentParser& parser)
             list2.insert(list2.end(), group.begin(), group.end());
         }
 
-
-        double rbo = RBO(list1, list2, 0.9);
+        if (list1.size() < opts.min_size || list2.size() < opts.min_size) {
+            output << "-1" << std::endl;
+        } else {
+            double rbo = RBO_MIN(list1, list2, find_p(0.9, 0.1, std::min(list1.size(), list2.size()), 0.000001));
+            output << rbo << std::endl;
+            sum_rbo += rbo;
+        }
+        
         list1.clear();
         list2.clear();
-        sum_rbo += rbo;
-        output << rbo << std::endl;
-        
     }
 
     output << sum_rbo / i << std::endl;
@@ -132,10 +137,16 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-o", "--output-filename")
         .help("RBOs output file, last line is average RBO values of all lists, others are RBO values of each list")
         .default_value("rbos.txt");
-    parser.add_argument("--raw_lists") 
-        .help("flag - lists are not considered to be output of index queries anymore, but raw lists of numbers separated by ',' or ';' or '\\t' [default: raw_lists is off]")
+    parser.add_argument("--raw-lists") 
+        .help("flag - lists are not considered to be output of index queries anymore, but raw lists of numbers separated by ',' or ';' or '\\t' [default: raw-lists is off]")
         .default_value(false)   
         .implicit_value(true);  
+    parser.add_argument("--min_size") 
+        .help("minimum size of lists of documents to be considered for RBO calculation [default: 10]")
+        .default_value(10)
+        .action([](const std::string& value) {
+            return std::stoi(value);
+        });  
 
     return parser;
 }
@@ -146,7 +157,8 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.file1 = parser.get<std::string>("-f1");
     opts.file2 = parser.get<std::string>("-f2");
     opts.output_filename = parser.get<std::string>("-o");
-    opts.raw_lists = parser.get<bool>("--raw_lists");
+    opts.raw_lists = parser.get<bool>("--raw-lists");
+    opts.min_size = parser.get<int>("--min_size");
 
     return opts;
 }
@@ -209,7 +221,7 @@ double RBO_MIN(const std::vector<int>& A, const std::vector<int>& B, double p) {
                       - ankerl::unordered_dense::set<int>(A.begin(), A.begin() + d).count(B[i]));
 
         rbo_min += ((X_d - X_D) / (double)d) * P;  
-        std::cerr << "i = " << i << ", X_d = " << X_d << ", X_D = " << X_D << ", rbo_min = " << rbo_min << std::endl;
+        //std::cerr << "i = " << i << ", X_d = " << X_d << ", X_D = " << X_D << ", rbo_min = " << rbo_min << std::endl;
         P *= p;  
         A_prefix.insert(A[i]);
         B_prefix.insert(B[i]);
@@ -227,5 +239,37 @@ double RBO_weight(double p, int d) {
     }
     return 1 - P + (1 - p) / p * d * (-std::log(1 - p) - sum);
 }
+
+#include <cmath>
+#include <limits>
+
+double find_p(double target_weight, double target_proportion_of_R, int len_R, double eps) {
+    int depth = static_cast<int>(std::ceil(target_proportion_of_R * len_R));
+
+    double low = eps;
+    double high = 1-eps;
+    double best_p = std::numeric_limits<double>::quiet_NaN();
+    double best_diff = std::numeric_limits<double>::infinity();
+
+    while ((high - low) > eps) {
+        double mid = (low + high) / 2.0;
+        double w = RBO_weight(mid, depth);
+        double diff = std::abs(w - target_weight);
+
+        if (diff < best_diff) {
+            best_diff = diff;
+            best_p = mid;
+        }
+
+        if (w < target_weight) {
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+
+    return best_p;
+}
+
 
 } // namespace kaminari
