@@ -49,14 +49,6 @@ include_directories(${PROJECT_SOURCE_DIR})
 
 ## kaminari 
 
-set(BIOLIB_SOURCES
-  bundled/biolib/src/io.cpp
-  bundled/biolib/src/elias_fano.cpp
-  bundled/biolib/src/kmer_view.cpp
-  bundled/biolib/src/logtools.cpp
-  bundled/biolib/bundled/MurmurHash3.cpp
-)
-
 set(KAMINARI_SOURCES
   src/utils.cpp
   src/build.cpp
@@ -65,23 +57,22 @@ set(KAMINARI_SOURCES
   src/hybrid.cpp
 )
 
-add_library(biolib_static STATIC
-  ${BIOLIB_SOURCES}
-)
-
 # add_subdirectory(bundled/biolib)
 add_executable(kaminari src/kaminari.cpp ${KAMINARI_SOURCES})
 
-# Include FQFeeder
+
+# Compile dependencies
+# FQFeeder
 add_subdirectory(bundled/FQFeeder)
 
-# Include FQFeeder
+# unordered_dense (fast hashmap)
 add_subdirectory(bundled/unordered_dense)
 
-# Add pthash as a subdirectory
+# Minimizers
+add_subdirectory(bundled/Minimizers)
+
+# pthash
 add_subdirectory(bundled/pthash)
-
-
 
 # pthash includes
 target_include_directories(kaminari PRIVATE
@@ -91,9 +82,22 @@ target_include_directories(kaminari PRIVATE
     ${PROJECT_SOURCE_DIR}/bundled/pthash/external/xxHash
 )
 
-add_dependencies(kaminari biolib_static) # lphash_static
+#Biolib
+set(BIOLIB_SOURCES
+  bundled/biolib/src/io.cpp
+  bundled/biolib/src/elias_fano.cpp
+  bundled/biolib/src/kmer_view.cpp
+  bundled/biolib/src/logtools.cpp
+  bundled/biolib/bundled/MurmurHash3.cpp
+)
 
-add_subdirectory(bundled/Minimizers)
+add_library(biolib_static STATIC
+  ${BIOLIB_SOURCES}
+)
+
+add_dependencies(kaminari biolib_static) 
+
+
 
 target_link_libraries(kaminari PRIVATE
   biolib_static
@@ -102,6 +106,7 @@ target_link_libraries(kaminari PRIVATE
   PTHASH
   unordered_dense
   z
+  BreiZHMinimizerLib
 )
 
 if (LINUX)
@@ -109,8 +114,6 @@ if (LINUX)
     rt
   )
 endif()
-
-target_link_libraries(kaminari PRIVATE BreiZHMinimizerLib)
 
 #----------------------------- Tests ----------------------------
 
@@ -126,6 +129,7 @@ target_link_libraries(test
   PTHASH
   unordered_dense
   z
+  BreiZHMinimizerLib
 )
 
 # If on Linux, link the rt library for the test executable as well
