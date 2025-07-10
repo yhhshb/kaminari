@@ -4,8 +4,9 @@
 
 #include "../include/constants.hpp"
 #include "../include/index/index.hpp"
-#include "../include/index/index_build.hpp"
-#include "../include/index/index_build_metage.hpp"
+#include "../include/index/build/index_build.hpp"
+#include "../include/index/build/index_build_metage.hpp"
+#include "../include/index/io/index_save.hpp"
 #include "../include/hybrid.hpp"
 #include "../include/utils.hpp"
 #include "../include/build_options.hpp"
@@ -25,10 +26,15 @@ int main(const argparse::ArgumentParser& parser)
         std::cerr << "\n";
     }
     if (opts.output_filename != "") {
-        std::ofstream out(opts.output_filename, std::ios::binary);
-        saver saver(out);
-        idx.visit(saver);
-        if (opts.verbose) std::cerr << "Written " << saver.get_byte_size() << " Bytes\n";
+        //std::ofstream out(opts.output_filename, std::ios::binary);
+        //saver saver(out);
+        //idx.visit(saver);
+        if (opts.verbose) {
+            std::cerr << "Written " << idx.save(opts.output_filename) << " Bytes\n";
+        }
+        else {
+            idx.save(opts.output_filename);
+        }
     }
     return 0;
 }

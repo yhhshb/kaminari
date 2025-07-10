@@ -71,9 +71,11 @@ class index
         std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
         
         void memory_breakdown(std::ostream& out) const noexcept;
+        size_t save(std::string const& dirname);
         
         template <class Visitor>
         void visit(Visitor& visitor);
+        
 
     private:
         typedef pthash::build_configuration pthash_opt_t;
@@ -210,7 +212,7 @@ METHOD_HEADER::visit(Visitor& visitor)
     visitor.visit(pthash_constant);
     visitor.visit(hf); // lphash mphf
     visitor.visit(m_ccs); // colors
-    visitor.visit(m_map); // map between mphf values and color classes
+    //visitor.visit(m_map); // map between mphf values and color classes
 }
 
 CLASS_HEADER

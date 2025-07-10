@@ -201,6 +201,24 @@ struct compact_vector  //
         std::vector<uint64_t> m_data;
     };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
     compact_vector() : m_size(0), m_width(0), m_mask(0) {}
 
     template <typename Iterator>
