@@ -71,7 +71,7 @@ int main(const argparse::ArgumentParser& parser)
         values.clear();
         parse_line(line1); //fill values
 
-        int j = 0;
+        size_t j = 0;
         while (j < values.size()) {
             std::vector<int> group;
             int score = std::get<1>(values[j]);
@@ -106,7 +106,7 @@ int main(const argparse::ArgumentParser& parser)
             list2.insert(list2.end(), group.begin(), group.end());
         }
 
-        if (list1.size() < opts.min_size || list2.size() < opts.min_size) {
+        if (static_cast<int>(list1.size()) < opts.min_size || static_cast<int>(list2.size()) < opts.min_size) {
             output << "-1" << std::endl;
         } else {
             double rbo = RBO_MIN(list1, list2, find_p(0.9, 0.1, std::min(list1.size(), list2.size()), 0.000001));

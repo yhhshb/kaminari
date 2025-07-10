@@ -1,7 +1,7 @@
 #ifndef INDEX_BUILD_HPP
 #define INDEX_BUILD_HPP
 
-#include "../../bundled/Minimizers/include/BreiZHMinimizer.hpp"
+#include "../../bundled/Minimizers/lib/BreiZHMinimizer.hpp"
 
 namespace kaminari {
 namespace minimizer {
@@ -114,9 +114,27 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     auto allocated = get_file_size(m_filenames[0]);
     allocated = (allocated/1024/1024 < 10) ? 16 : 1024; // 16MB for bacteria/small genomes, 1GB for other genomes
 
-    generate_minimizers(build_parameters.input_filenames, build_parameters.tmp_dir, build_parameters.nthreads, allocated, build_parameters.k, build_parameters.m, build_parameters.verbose);
+    std::string output_filename = "result";
 
-    std::string Bzhminmer_file = build_parameters.tmp_dir + "/result." + std::to_string(build_parameters.input_filenames.size()) + "c";
+    generate_minimizers(
+        build_parameters.input_filenames, 
+        output_filename,
+        build_parameters.tmp_dir, 
+        build_parameters.nthreads, 
+        allocated, 
+        build_parameters.k, 
+        build_parameters.m, 
+        8,
+        "crumsort",
+        build_parameters.verbose,
+        false, false, false // -> dont skip minmer step, dont keep tmp files
+    );
+
+    std::string Bzhminmer_file = 
+        build_parameters.tmp_dir + "/" + 
+        output_filename + "." + 
+        std::to_string(build_parameters.input_filenames.size()) + "c";
+
     std::vector<element> sorted_min_cols;
     process(Bzhminmer_file, sorted_min_cols, m_filenames.size());
     std::remove(Bzhminmer_file.c_str()); // delete file
