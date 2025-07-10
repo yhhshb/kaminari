@@ -15,4 +15,4 @@
 [submodule "bundled/Minimizers"]
 	path = bundled/Minimizers
 	url = https://github.com/blegal/Minimizers.git
-	branch = kaminari
+	branch = main
