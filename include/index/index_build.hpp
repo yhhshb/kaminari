@@ -114,7 +114,7 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     auto allocated = get_file_size(m_filenames[0]);
     allocated = (allocated/1024/1024 < 10) ? 16 : 1024; // 16MB for bacteria/small genomes, 1GB for other genomes
 
-    std::string output_filename = "result";
+    std::string output_filename = build_parameters.tmp_dir + "/result";
 
     generate_minimizers(
         build_parameters.input_filenames, 
@@ -131,7 +131,6 @@ METHOD_HEADER::build(const build::options_t& build_parameters)
     );
 
     std::string Bzhminmer_file = 
-        build_parameters.tmp_dir + "/" + 
         output_filename + "." + 
         std::to_string(build_parameters.input_filenames.size()) + "c";
 
