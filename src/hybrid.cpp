@@ -126,7 +126,7 @@ hybrid::builder::build(hybrid& h)
             << "\tm_num_total_integers " << m_num_total_integers << "\n" 
             << "\ttotal bits for ints = " << h.m_colors.size() << "\n" 
             << "\ttotal bits per offsets = " << h.m_offsets.bit_size() << "\n" 
-            << "\ttotal bits = " << h.m_offsets.bit_size() + h.m_colors.size() << "n" 
+            << "\ttotal bits = " << h.m_offsets.bit_size() + h.m_colors.size() << "\n" 
             << "\toffsets: " << static_cast<double>(h.m_offsets.bit_size()) / m_num_total_integers << " bits/int\n" 
             << "\tlists: " << static_cast<double>(h.m_colors.size()) / m_num_total_integers << " bits/int\n";
     }
