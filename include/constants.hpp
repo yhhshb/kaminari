@@ -11,8 +11,6 @@
 #include "../bundled/biolib/include/logtools.hpp"
 #include "../bundled/biolib/include/hash.hpp"
 
-#include "compile_constants.tdp"
-
 namespace kaminari {
 
 // typedef bit::rs::array<bit_vector, 64, 8, false, false> ranked_bit_vector;
@@ -28,8 +26,11 @@ typedef hash::double_hash64 double_hash64;
 
 namespace constants {
 
-static const std::size_t MAX_KMER_SIZE = sizeof(kmer_t) * 4;
-static const std::size_t GB = 1000 * 1000 * 1000;
+static const std::size_t MAX_KMER_SIZE = 32;
+
+static const std::size_t KB = 1024;
+static const std::size_t MB = 1024 * KB;
+static const std::size_t GB = 1024 * MB;
 
 } // namespace constants
 

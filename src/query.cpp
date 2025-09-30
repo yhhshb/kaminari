@@ -5,7 +5,6 @@
 #include "../bundled/FQFeeder/include/FastxParser.hpp"
 #include "../include/index/index.hpp"
 #include "../include/psa/ranking_threshold_union_query.hpp"
-#include "../include/psa/threshold_union_query.hpp"
 #include "../include/hybrid.hpp"
 #include "../include/query.hpp"
 
@@ -13,7 +12,6 @@ namespace kaminari::query {
 
 options_t check_args(const argparse::ArgumentParser& parser);
 void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut);
-void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& out, std::mutex& ofile_mut);
 
 int main(const argparse::ArgumentParser& parser) 
 {
@@ -55,34 +53,19 @@ int main(const argparse::ArgumentParser& parser)
     std::vector<std::thread> workers;
     std::mutex ofile_mut;
 
-    if (opts.ranking){
-        if (opts.verbose > 0){
-            std::cerr << "Start queries, ranking=on, threshold=" << opts.threshold_ratio << "\n";
-        } 
-        for (uint64_t i = 1; i != opts.nthreads; ++i) {
-            workers.push_back(
-                std::thread(
-                    [&idx, &rparser, &opts, &out, &ofile_mut]() {
-                        ranking_queries(idx, rparser, opts, out, ofile_mut);
-                    }
-                )
-            );
-        }
+    if (opts.verbose > 0){
+        std::cerr << "Start queries, threshold=" << opts.threshold_ratio << "\n";
+    } 
+    for (uint64_t i = 1; i != opts.nthreads; ++i) {
+        workers.push_back(
+            std::thread(
+                [&idx, &rparser, &opts, &out, &ofile_mut]() {
+                    ranking_queries(idx, rparser, opts, out, ofile_mut);
+                }
+            )
+        );
     }
-    else{
-        if (opts.verbose > 0){
-            std::cerr << "Start queries, ranking=off, threshold=" << opts.threshold_ratio << "\n";
-        } 
-        for (uint64_t i = 1; i != opts.nthreads; ++i) {
-            workers.push_back(
-                std::thread(
-                    [&idx, &rparser, &opts, &out, &ofile_mut]() {
-                        classic_queries(idx, rparser, opts, out, ofile_mut);
-                    }
-                )
-            );
-        }
-    }
+    
     
     for (auto& w : workers) { w.join(); }
     rparser.stop();
@@ -110,10 +93,6 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-r", "--ratio")
         .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
         .default_value(std::string("1.0"));
-    parser.add_argument("--no-ranking") 
-        .help("flag - list of document ids will not be ranked according to the number of kmers/doc [default: ranking is on]")
-        .default_value(false)   // Default is on (ranking is done)
-        .implicit_value(true);   // disable ranking when provided
     parser.add_argument("-d", "--tmp-dir")
         .help("temporary directory")
         .default_value(std::string("."));
@@ -159,8 +138,6 @@ options_t check_args(const argparse::ArgumentParser& parser)
         opts.threshold_ratio = 1;
     }
 
-    opts.ranking = !parser.get<bool>("--no-ranking");    
-
     opts.verbose = parser.get<std::size_t>("--verbose");
 
     // if (opts.check and opts.nthreads != 1) {
@@ -196,51 +173,6 @@ void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vecto
 
             ss << record.name << "\t" << ids.size();
             for (auto c : ids) { ss << "\t(" << c.item << "," << c.score << ")"; }
-            ss << "\n";
-
-            if (buff_size > buff_thresh) {
-                std::string outs = ss.str();
-                ss.str("");
-                ofile_mut.lock();
-                outstream.write(outs.data(), outs.size());
-                ofile_mut.unlock();
-                buff_size = 0;
-            }
-        }
-    }
-    // dump anything left in the buffer
-    if (buff_size > 0) {
-        std::string outs = ss.str();
-        ss.str("");
-        ofile_mut.lock();
-        outstream.write(outs.data(), outs.size());
-        ofile_mut.unlock();
-        buff_size = 0;
-    }
-}
-
-void classic_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
-    using query_fn_t = std::vector<uint32_t> (minimizer::index<color_classes::hybrid, bits::compact_vector>::*)(const char*, std::size_t, options_t&) const;
-
-   query_fn_t query_algo;
-    if (opts.threshold_ratio == 1) { //TODO: remove this, it is a temporary fix (full intersec deleted)
-        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
-    } else {
-        query_algo = &minimizer::index<color_classes::hybrid, bits::compact_vector>::query_union_threshold;
-    }
-
-   auto rg = rparser.getReadGroup();
-   std::stringstream ss;
-   uint64_t buff_size = 0;
-   constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
-
-   while (rparser.refill(rg)) {
-        for (auto const& record : rg) {
-            auto ids = (idx.*query_algo)(record.seq.c_str(), record.seq.size(), opts);
-            buff_size += 1;
-
-            ss << record.name << "\t" << ids.size();
-            for (auto c : ids) { ss << "\t" << c; }
             ss << "\n";
 
             if (buff_size > buff_thresh) {
