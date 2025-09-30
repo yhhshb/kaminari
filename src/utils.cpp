@@ -1,6 +1,7 @@
-#include <cstdint>
 #include <sstream>
 #include <fstream>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "include/utils.hpp"
 
 namespace kaminari::utils {
@@ -27,7 +28,8 @@ std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& 
     return filename.str();
 }
 
-std::string getExecutablePath() {
+std::string getExecutablePath() 
+{
     char result[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
     if (count != -1) {
@@ -35,6 +37,19 @@ std::string getExecutablePath() {
         return std::string(result).substr(0, std::string(result).find_last_of("/"));;
     }
     return "";
+}
+
+void create_directory(std::string dirname) 
+{
+    if (dirname.empty()) return;
+    struct stat st;
+    if (stat(dirname.c_str(), &st) != 0) {
+        if (mkdir(dirname.c_str(), 0755) != 0) {
+            throw std::runtime_error("Failed to create directory: " + dirname);
+        }
+    } else if (!S_ISDIR(st.st_mode)) {
+        throw std::runtime_error(dirname + " exists and is not a directory");
+    }
 }
 
 } // namespace utils

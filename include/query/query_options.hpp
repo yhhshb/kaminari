@@ -8,12 +8,10 @@
 namespace kaminari::query {
 
 struct options_t {
-    std::string index_filename;
+    std::string index_dirname;
     std::vector<std::string> input_filenames;
     std::string output_filename;
-    std::string tmp_dir;
     uint8_t nthreads;
-    std::size_t max_ram;
     float threshold_ratio;
     std::size_t verbose;
 };

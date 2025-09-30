@@ -50,11 +50,13 @@ include_directories(${PROJECT_SOURCE_DIR})
 ## kaminari 
 
 set(KAMINARI_SOURCES
-  src/utils.cpp
   src/build.cpp
   src/query.cpp
+  src/index.cpp
+  src/utils.cpp
+  src/ext_bit_parser.cpp
+  src/colorsets_accessor.cpp
   src/rbo.cpp
-  src/hybrid.cpp
 )
 
 # add_subdirectory(bundled/biolib)

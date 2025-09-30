@@ -18,6 +18,8 @@ std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& 
 
 std::string getExecutablePath();
 
+void create_directory(std::string dirname);
+
 //defined here because template
 template<class ForwardIt>
 ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)

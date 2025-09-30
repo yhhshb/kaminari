@@ -5,20 +5,16 @@
 #include "../bundled/FQFeeder/include/FastxParser.hpp"
 #include "../include/index.hpp"
 #include "../include/query/ranking_threshold_union_query.hpp"
-#include "../include/hybrid.hpp"
 #include "../include/query/query.hpp"
 
 namespace kaminari::query {
-
-options_t check_args(const argparse::ArgumentParser& parser);
-void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut);
 
 int main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
 
-    //load index in mem
-    minimizer::index<color_classes::hybrid, bits::compact_vector> idx;
+    /* //load index in mem
+    minimizer::index idx;
     {
         std::ifstream in(opts.index_filename, std::ios::binary);
         loader loader(in);
@@ -70,7 +66,7 @@ int main(const argparse::ArgumentParser& parser)
     for (auto& w : workers) { w.join(); }
     rparser.stop();
 
-    std::cerr << "Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
+    std::cerr << "Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl; */
 
     return 0;
 }
@@ -81,7 +77,7 @@ argparse::ArgumentParser get_parser()
     parser.add_description("Query a kaminari index (query -h for more information)");
 
     parser.add_argument("-x", "--index")
-        .help("kaminari index to use")
+        .help("kaminari index directory to use, e.g. with my_index/index.kaminari, use -x my_index")
         .required();
     parser.add_argument("-i", "--input-list")
         .help("list of fasta files to query, if 1 file ending with \".list\" is provided, it is assumed to be a list of filenames")
@@ -93,13 +89,6 @@ argparse::ArgumentParser get_parser()
     parser.add_argument("-r", "--ratio")
         .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
         .default_value(std::string("1.0"));
-    parser.add_argument("-d", "--tmp-dir")
-        .help("temporary directory")
-        .default_value(std::string("."));
-    parser.add_argument("-g", "--max-ram")
-        .help("RAM limit (GB)")
-        .scan<'d', std::size_t>()
-        .default_value(std::size_t(4));
     parser.add_argument("-t", "--threads")
         .help("number of threads")
         .scan<'u', std::size_t>()
@@ -115,10 +104,9 @@ options_t check_args(const argparse::ArgumentParser& parser)
 {
     options_t opts;
     std::size_t tmp;
-    opts.index_filename = parser.get<std::string>("-x");
+    opts.index_dirname = parser.get<std::string>("-x");
     opts.input_filenames = parser.get<std::vector<std::string>>("-i");
     opts.output_filename = parser.get<std::string>("-o");
-    opts.tmp_dir = parser.get<std::string>("--tmp-dir");
 
     tmp = std::min(parser.get<std::size_t>("-t"), std::size_t(std::thread::hardware_concurrency()));
     opts.nthreads = static_cast<decltype(opts.nthreads)> (tmp);
@@ -128,7 +116,6 @@ options_t check_args(const argparse::ArgumentParser& parser)
         std::cerr << "Warning: max ram = 0, setting it to 1 GB\n";
         tmp = 1;
     }
-    opts.max_ram = tmp;
 
     std::string ratio_str = parser.get<std::string>("--ratio");
     opts.threshold_ratio = std::stof(ratio_str);
@@ -155,7 +142,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     return opts;
 }
 
-void ranking_queries(minimizer::index<color_classes::hybrid, bits::compact_vector>& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+void ranking_queries(minimizer::index& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
     auto rg = rparser.getReadGroup();
     std::stringstream ss;
     uint64_t buff_size = 0;
