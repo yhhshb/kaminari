@@ -1,6 +1,8 @@
 #ifndef RANKING_THRESHOLD_UNION_QUERY_HPP
 #define RANKING_THRESHOLD_UNION_QUERY_HPP
 
+#include "../utils.hpp"
+
 namespace kaminari {
 namespace minimizer {
 

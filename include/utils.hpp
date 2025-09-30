@@ -11,9 +11,14 @@
 
 namespace kaminari::utils {
 
-std::vector<std::string> read_filenames(std::string const& filenames_list);
+std::vector<std::string>
+read_filenames(std::string const& filenames_list);
+
 std::string get_tmp_filename(const std::string& tmp_dirname, const std::string& prefix, std::size_t run_identifier);
 
+std::string getExecutablePath();
+
+//defined here because template
 template<class ForwardIt>
 ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
 {
@@ -37,8 +42,6 @@ ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)
 }
 
 
-std::string getExecutablePath();
-
-} // namespace kaminari::utils
+} // namespace util
 
 #endif // KAMINARI_UTILS_HPP

@@ -3,13 +3,13 @@
 #include <fstream>
 
 #include "../include/constants.hpp"
-#include "../include/index/index.hpp"
-#include "../include/index/index_build.hpp"
+#include "../include/index.hpp"
+#include "../include/build/index_build.hpp"
 #include "../include/hybrid.hpp"
-#include "../include/utils.hpp"
-#include "../include/build_options.hpp"
-#include "../include/build.hpp"
+#include "../include/build/build_options.hpp"
+#include "../include/build/build.hpp"
 #include "../include/compact_vector.hpp"
+#include "../include/utils.hpp"
 
 namespace kaminari::build {
 

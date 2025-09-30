@@ -22,12 +22,11 @@ extern "C" {
 #include "../../bundled/biolib/include/iterator/sorted_merge_iterator.hpp"
 #include "../../bundled/unordered_dense/include/ankerl/unordered_dense.h"
 
-#include "../constants.hpp"
-#include "../minimizer.hpp"
-#include "../utils.hpp"
-#include "../build_options.hpp"
-#include "../query_options.hpp"
-#include "../compact_vector.hpp"
+#include "constants.hpp"
+#include "query/minimizer.hpp"
+#include "build/build_options.hpp"
+#include "query/query_options.hpp"
+#include "compact_vector.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 

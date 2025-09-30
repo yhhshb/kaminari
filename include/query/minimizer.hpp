@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include "../bundled/biolib/include/constants.hpp"
+#include "../../bundled/biolib/include/constants.hpp"
 
 namespace minimizer {
 

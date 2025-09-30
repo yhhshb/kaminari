@@ -3,10 +3,10 @@
 #include <fstream>
 #include <thread>
 #include "../bundled/FQFeeder/include/FastxParser.hpp"
-#include "../include/index/index.hpp"
-#include "../include/ranking_threshold_union_query.hpp"
+#include "../include/index.hpp"
+#include "../include/query/ranking_threshold_union_query.hpp"
 #include "../include/hybrid.hpp"
-#include "../include/query.hpp"
+#include "../include/query/query.hpp"
 
 namespace kaminari::query {
 
