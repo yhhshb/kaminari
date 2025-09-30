@@ -17,7 +17,6 @@ struct options_t {
     std::string tmp_dir;
     uint8_t nthreads;
     std::size_t max_ram;
-    bool metagenome;
     std::size_t verbose;
 };
 } // namespace kaminari::build

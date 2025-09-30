@@ -50,11 +50,6 @@ struct element { //for build()
     size_t n_blocks;
 };
 
-struct Function { //for build_metage()
-    std::function<void()> f; // Actual function
-    std::string desc;
-};
-
 CLASS_HEADER
 class index
 {
@@ -67,7 +62,6 @@ class index
         index(const build::options_t& build_parameters);
 
         //following methods are explicitly instantiated in src/psa/
-        std::vector<color_t> query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
         std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
         
         void memory_breakdown(std::ostream& out) const noexcept;
@@ -111,28 +105,11 @@ class index
 
 
         ////
-        // in index_build_metage.hpp, build the index for metagenomic data
-        ////
-        void worker_thread(
-            std::stack<Function>& task_stack,
-            std::mutex& task_stack_mutex,
-            std::condition_variable& cv,
-            std::atomic<uint32_t>& running_task,
-            std::atomic<bool>& all_done);
-        void read_file_task(const std::string& file, color_t doc_id, emem_t& result, const build::options_t& build_parameters); 
-
-        void build_metage(const build::options_t& build_parameters);
-
-
-        ////
         // in psa/ directory, query the index
         //following methods are explicitly instantiated in include/psa/files
         //with colorsclasses being from hybrid.hpp and color mapper being pthash::compact_vector
         std::vector<scored_id> ranking_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
-
-        std::vector<color_t> union_dense_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
-        std::vector<color_t> union_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
         
         ////
         // members
@@ -171,11 +148,7 @@ METHOD_HEADER::index(const build::options_t& build_parameters)
     canonical(build_parameters.canonical),
     pthash_constant(build_parameters.pthash_constant)
 {
-    if (build_parameters.metagenome) {
-        build_metage(build_parameters);
-    } else {
-        build(build_parameters);
-    }
+    build(build_parameters);
 }
 
 CLASS_HEADER

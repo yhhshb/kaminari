@@ -5,7 +5,6 @@
 #include "../include/constants.hpp"
 #include "../include/index/index.hpp"
 #include "../include/index/index_build.hpp"
-#include "../include/index/index_build_metage.hpp"
 #include "../include/hybrid.hpp"
 #include "../include/utils.hpp"
 #include "../include/build_options.hpp"
@@ -55,10 +54,6 @@ argparse::ArgumentParser get_parser()
         .default_value(size_t(19));
     parser.add_argument("-a", "--canonical")
         .help("canonical minimizers")
-        .default_value(false)
-        .implicit_value(true);
-    parser.add_argument("--metagenome")
-        .help("recommended for big (>1000docs) metagenomic data collection")
         .default_value(false)
         .implicit_value(true);
     parser.add_argument("-b", "--bit-check")
@@ -120,7 +115,6 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
-    opts.metagenome = parser.get<bool>("--metagenome");
     opts.verbose = parser.get<std::size_t>("--verbose");
 
     if (opts.input_filenames.size() == 1){
