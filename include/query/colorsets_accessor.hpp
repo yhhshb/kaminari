@@ -4,11 +4,13 @@
 #include "../codes.hpp"
 #include "../mmap.hpp"
 #include "../ext_bit_parser.hpp"
+#include "../colorsets.hpp"
 #include "../../bundled/biolib/include/elias_fano.hpp"
 #include "../../bundled/biolib/include/io.hpp"
 
 class colorsets_accessor
     // class used to access the colors contained in a color class, works like a reader head, can be re-located elsewhere to read another colorset
+    // idea: 1 per query thread
         {
             public:
                 enum list_type { 
@@ -18,26 +20,20 @@ class colorsets_accessor
                 };
 
                 colorsets_accessor();
-                colorsets_accessor(std::string basename);
+                colorsets_accessor(colorsets* parent);
                 void move_to(uint64_t cid);
                 uint32_t value() const;
                 void next();
                 void next_geq(uint64_t lower_bound);
                 void comp_next_geq(uint64_t lower_bound);
 
-                void reset();
-
                 list_type type() const;
                 uint64_t size() const;
                 uint64_t limit();
                 
             private:
-                uint64_t m_num_docs;
-                uint64_t m_sparse_set_threshold_size;
-                uint64_t m_dense_set_threshold_size;
-                bit::ef::array m_offsets;
-
-                ext_bit_parser m_parser;
+                colorsets* m_parent;   // non owning so that each thread uses the same offsets elias fano
+                ext_bit_parser m_parser;     // lightweight parser into mmap
                 uint64_t m_begin;
                 uint64_t m_orig;
                 list_type m_type;

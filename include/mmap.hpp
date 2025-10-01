@@ -82,65 +82,85 @@ namespace mymm {
     }
 
     class fdw
+{
+public:
+    fdw() : m_handle(invalid_fd), m_own(false) {}
+    fdw(const fdw&) = delete;
+    fdw& operator=(const fdw&) = delete;
+
+    // Move constructor — transfers ownership
+    fdw(fdw&& other) noexcept
+        : m_handle(other.m_handle), m_own(other.m_own)
     {
-      public:
-        fdw() : m_handle(invalid_fd), m_own(false) {}
-        fdw(const fdw&) = delete;
-        fdw& operator=(const fdw&) = delete;
-        fdw(fdw&& fd) = default;
-        fdw& operator=(fdw&&) = default;
+        other.m_handle = invalid_fd;
+        other.m_own = false;
+    }
 
-        fdw(fd_handle_type fd, bool own = true)
-          : m_handle(fd), m_own(own)
-        {}
-
-        void set(fd_handle_type fd, bool own = true)
+    // Move assignment — transfers ownership safely
+    fdw& operator=(fdw&& other) noexcept
+    {
+        if (this != &other)
         {
-          m_handle = fd;
-          m_own = own;
+            close(); // close current fd if owned
+            m_handle = other.m_handle;
+            m_own = other.m_own;
+            other.m_handle = invalid_fd;
+            other.m_own = false;
         }
+        return *this;
+    }
 
-        ~fdw()
-        {
-          if (is_open())
+    fdw(fd_handle_type fd, bool own = true)
+        : m_handle(fd), m_own(own)
+    {}
+
+    void set(fd_handle_type fd, bool own = true)
+    {
+        m_handle = fd;
+        m_own = own;
+    }
+
+    ~fdw()
+    {
+        if (is_open())
             close();
-        }
+    }
 
-        operator bool() const noexcept
-        {
-          return is_open();
-        }
+    operator bool() const noexcept
+    {
+        return is_open();
+    }
 
-        [[nodiscard]] fd_handle_type value() const noexcept
-        {
-          return m_handle;
-        }
+    [[nodiscard]] fd_handle_type value() const noexcept
+    {
+        return m_handle;
+    }
 
-        void release() noexcept
-        {
-          m_own = false;
-        }
+    void release() noexcept
+    {
+        m_own = false;
+    }
 
-        void acquire() noexcept
-        {
-          m_own = true;
-        }
+    void acquire() noexcept
+    {
+        m_own = true;
+    }
 
-        [[nodiscard]] bool is_open() const noexcept
-        {
-          return m_handle != invalid_fd;
-        }
+    [[nodiscard]] bool is_open() const noexcept
+    {
+        return m_handle != invalid_fd;
+    }
 
-        void close(bool force = false)
+    void close(bool force = false)
+    {
+        if ((m_own || force) && is_open())
         {
-          if ((m_own || force) && is_open())
-          {
             close_fd(m_handle);
             m_handle = invalid_fd;
-          }
         }
+    }
 
-      private:
+    private:
         fd_handle_type m_handle {invalid_fd};
         bool m_own {true};
     };

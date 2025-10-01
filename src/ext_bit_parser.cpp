@@ -4,17 +4,11 @@ ext_bit_parser::ext_bit_parser()
     : _data(nullptr), block_size(0), idx(0), buffer(0), available(0) 
 {}
 
-ext_bit_parser::ext_bit_parser(uint64_t const * const data, std::size_t size, std::size_t starting_bit_position)
-    : _data(data), block_size(size)
+ext_bit_parser::ext_bit_parser(mymm::immap<uint64_t>& mapped, std::size_t starting_bit_position)
+    : mapped_file_ptr(&mapped), _data(mapped.data()), block_size(mapped.size())
 {
     reset(starting_bit_position);
 }
-
-ext_bit_parser::ext_bit_parser(mymm::immap<uint64_t>& mapped, std::size_t starting_bit_position)
-            : _data(mapped.data()), block_size(64)
-        {
-            reset(starting_bit_position);
-        }
 
 /* return the next l bits from the current position and advance by l bits */
 uint64_t 

@@ -6,20 +6,135 @@
 #include "../include/index.hpp"
 #include "../include/query/ranking_threshold_union_query.hpp"
 #include "../include/query/query.hpp"
+#include "../include/query/colorsets_accessor.hpp"
 
 namespace kaminari::query {
+
+void ranking_queries(minimizer::index& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
+    // 1 instance / thread, each one having its own query parser, its own colorsets parser
+
+    colorsets_accessor accessor(&idx.get_colorsets());
+
+    auto rg = rparser.getReadGroup();
+    std::stringstream ss;
+    uint64_t buff_size = 0;
+    constexpr uint64_t buff_thresh = 64; //Hardcoded buffer size
+
+    while (rparser.refill(rg)) {
+        for (auto const& record : rg) {
+            auto ids = idx.ranking_query_union_threshold(accessor, record.seq.c_str(), record.seq.size(), opts);
+            std::sort(
+                ids.begin(),
+                ids.end(),
+                [](auto const& x, auto const& y) { return x.score > y.score; }
+            );
+            buff_size += 1;
+
+            ss << record.name << "\t" << ids.size();
+            for (auto c : ids) { ss << "\t(" << c.item << "," << c.score << ")"; }
+            ss << "\n";
+
+            if (buff_size > buff_thresh) {
+                std::string outs = ss.str();
+                ss.str("");
+                ofile_mut.lock();
+                outstream.write(outs.data(), outs.size());
+                ofile_mut.unlock();
+                buff_size = 0;
+            }
+        }
+    }
+    // dump anything left in the buffer
+    if (buff_size > 0) {
+        std::string outs = ss.str();
+        ss.str("");
+        ofile_mut.lock();
+        outstream.write(outs.data(), outs.size());
+        ofile_mut.unlock();
+        buff_size = 0;
+    }
+}
+
+argparse::ArgumentParser get_parser()
+{
+    argparse::ArgumentParser parser("query", "1.0.0", argparse::default_arguments::help);
+    parser.add_description("Query a kaminari index (query -h for more information)");
+
+    parser.add_argument("-x", "--index")
+        .help("kaminari index directory to use, e.g. with my_index/index.kaminari, use -x my_index")
+        .required();
+    parser.add_argument("-i", "--input-list")
+        .help("list of fasta files to query, if 1 file ending with \".list\" is provided, it is assumed to be a list of filenames")
+        .nargs(argparse::nargs_pattern::at_least_one)
+        .required();
+    parser.add_argument("-o", "--output-filename")
+        .help("query output, for each sequence of each input file, output its color set")
+        .default_value("kaminari_results.txt");
+    parser.add_argument("-r", "--ratio")
+        .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
+        .default_value(std::string("1.0"));
+    parser.add_argument("-t", "--threads")
+        .help("number of threads")
+        .scan<'u', std::size_t>()
+        .default_value(std::size_t(1));
+    parser.add_argument("-v", "--verbose")
+        .help("increase output verbosity")
+        .scan<'d', std::size_t>()
+        .default_value(std::size_t(0));
+    return parser;
+}
+
+options_t check_args(const argparse::ArgumentParser& parser)
+{
+    options_t opts;
+    std::size_t tmp;
+    opts.index_dirname = parser.get<std::string>("-x");
+    opts.input_filenames = parser.get<std::vector<std::string>>("-i");
+    opts.output_filename = parser.get<std::string>("-o");
+
+    tmp = std::min(parser.get<std::size_t>("-t"), std::size_t(std::thread::hardware_concurrency()));
+    opts.nthreads = static_cast<decltype(opts.nthreads)> (tmp);
+
+    std::string ratio_str = parser.get<std::string>("--ratio");
+    opts.threshold_ratio = std::stof(ratio_str);
+
+    if (opts.threshold_ratio <= 0.0 || opts.threshold_ratio > 1.0) {
+        std::cerr << "Warning: kmer ratio needs to be somewhere in ]0.0, 1.0] , setting it to 1.0\n";
+        opts.threshold_ratio = 1;
+    }
+
+    opts.verbose = parser.get<std::size_t>("--verbose");
+
+    // if (opts.check and opts.nthreads != 1) {
+    //     std::cerr << "[Warning] Checking does not support multi-threading\n";
+    // }
+
+    // check if input is a list of filenames or fasta files
+    if (opts.input_filenames.size() == 1 && 
+        opts.input_filenames.at(0).size() >= 5 &&
+        opts.input_filenames.at(0).substr(opts.input_filenames.at(0).size() - 5) == ".list") 
+    {
+        opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
+    }
+
+    return opts;
+}
+
 
 int main(const argparse::ArgumentParser& parser) 
 {
     auto opts = check_args(parser);
 
-    /* //load index in mem
+    //load index in mem
     minimizer::index idx;
     {
-        std::ifstream in(opts.index_filename, std::ios::binary);
+        std::ifstream in(opts.index_dirname + "/index.kaminari", std::ios::binary);
         loader loader(in);
         idx.visit(loader);
-        if (opts.verbose) std::cerr << "Read " << loader.get_byte_size() << " Bytes\n";
+        if (opts.verbose) std::cerr << "Read " << loader.get_byte_size() << " Bytes (metadata)\n";
+
+        idx.load_colormapper(opts.index_dirname);
+        idx.load_colorsets(opts.index_dirname);
     }
 
     //open output file
@@ -66,121 +181,10 @@ int main(const argparse::ArgumentParser& parser)
     for (auto& w : workers) { w.join(); }
     rparser.stop();
 
-    std::cerr << "Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl; */
+    std::cerr << "Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
 
     return 0;
 }
 
-argparse::ArgumentParser get_parser()
-{
-    argparse::ArgumentParser parser("query", "1.0.0", argparse::default_arguments::help);
-    parser.add_description("Query a kaminari index (query -h for more information)");
-
-    parser.add_argument("-x", "--index")
-        .help("kaminari index directory to use, e.g. with my_index/index.kaminari, use -x my_index")
-        .required();
-    parser.add_argument("-i", "--input-list")
-        .help("list of fasta files to query, if 1 file ending with \".list\" is provided, it is assumed to be a list of filenames")
-        .nargs(argparse::nargs_pattern::at_least_one)
-        .required();
-    parser.add_argument("-o", "--output-filename")
-        .help("query output, for each sequence of each input file, output its color set")
-        .default_value("kaminari_results.txt");
-    parser.add_argument("-r", "--ratio")
-        .help("ratio of kmer needed to select a color (e.g. r=0.3 -> need atleast 30\% of kmers belonging to the color c1 to select c1)")
-        .default_value(std::string("1.0"));
-    parser.add_argument("-t", "--threads")
-        .help("number of threads")
-        .scan<'u', std::size_t>()
-        .default_value(std::size_t(1));
-    parser.add_argument("-v", "--verbose")
-        .help("increase output verbosity")
-        .scan<'d', std::size_t>()
-        .default_value(std::size_t(0));
-    return parser;
-}
-
-options_t check_args(const argparse::ArgumentParser& parser)
-{
-    options_t opts;
-    std::size_t tmp;
-    opts.index_dirname = parser.get<std::string>("-x");
-    opts.input_filenames = parser.get<std::vector<std::string>>("-i");
-    opts.output_filename = parser.get<std::string>("-o");
-
-    tmp = std::min(parser.get<std::size_t>("-t"), std::size_t(std::thread::hardware_concurrency()));
-    opts.nthreads = static_cast<decltype(opts.nthreads)> (tmp);
-
-    tmp = parser.get<std::size_t>("--max-ram");
-    if (tmp == 0) {
-        std::cerr << "Warning: max ram = 0, setting it to 1 GB\n";
-        tmp = 1;
-    }
-
-    std::string ratio_str = parser.get<std::string>("--ratio");
-    opts.threshold_ratio = std::stof(ratio_str);
-
-    if (opts.threshold_ratio <= 0.0 || opts.threshold_ratio > 1.0) {
-        std::cerr << "Warning: kmer ratio needs to be somewhere in ]0.0, 1.0] , setting it to 1.0\n";
-        opts.threshold_ratio = 1;
-    }
-
-    opts.verbose = parser.get<std::size_t>("--verbose");
-
-    // if (opts.check and opts.nthreads != 1) {
-    //     std::cerr << "[Warning] Checking does not support multi-threading\n";
-    // }
-
-    // check if input is a list of filenames or fasta files
-    if (opts.input_filenames.size() == 1 && 
-        opts.input_filenames.at(0).size() >= 5 &&
-        opts.input_filenames.at(0).substr(opts.input_filenames.at(0).size() - 5) == ".list") 
-    {
-        opts.input_filenames = utils::read_filenames(opts.input_filenames.at(0));
-    }
-
-    return opts;
-}
-
-void ranking_queries(minimizer::index& idx, fastx_parser::FastxParser<fastx_parser::ReadSeq>& rparser, options_t& opts, std::ostream& outstream, std::mutex& ofile_mut){
-    auto rg = rparser.getReadGroup();
-    std::stringstream ss;
-    uint64_t buff_size = 0;
-    constexpr uint64_t buff_thresh = 50; //Hardcoded buffer size
-    
-    while (rparser.refill(rg)) {
-        for (auto const& record : rg) {
-            auto ids = idx.ranking_query_union_threshold(record.seq.c_str(), record.seq.size(), opts);
-            std::sort(
-                ids.begin(),
-                ids.end(),
-                [](auto const& x, auto const& y) { return x.score > y.score; }
-            );
-            buff_size += 1;
-
-            ss << record.name << "\t" << ids.size();
-            for (auto c : ids) { ss << "\t(" << c.item << "," << c.score << ")"; }
-            ss << "\n";
-
-            if (buff_size > buff_thresh) {
-                std::string outs = ss.str();
-                ss.str("");
-                ofile_mut.lock();
-                outstream.write(outs.data(), outs.size());
-                ofile_mut.unlock();
-                buff_size = 0;
-            }
-        }
-    }
-    // dump anything left in the buffer
-    if (buff_size > 0) {
-        std::string outs = ss.str();
-        ss.str("");
-        ofile_mut.lock();
-        outstream.write(outs.data(), outs.size());
-        ofile_mut.unlock();
-        buff_size = 0;
-    }
-}
 
 } // namespace kaminari

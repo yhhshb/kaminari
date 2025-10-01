@@ -20,8 +20,9 @@ extern "C" {
 #include "query/minimizer.hpp"
 #include "build/build_options.hpp"
 #include "query/query_options.hpp"
-#include "colormapper.hpp"
 #include "query/colorsets_accessor.hpp"
+#include "colormapper.hpp"
+#include "colorsets.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -50,7 +51,7 @@ class index
         index(build::options_t& build_parameters);
 
         //following methods are explicitly instantiated in src/psa/
-        std::vector<scored_id> ranking_query_union_threshold(char const * const q, const std::size_t l, options_t& opts) const noexcept;
+        std::vector<scored_id> ranking_query_union_threshold(colorsets_accessor& parser, char const * const q, const std::size_t l, options_t& opts) const noexcept;
         
         void memory_breakdown(std::ostream& out) const noexcept;
         
@@ -67,6 +68,18 @@ class index
             visitor.visit(hf); // lphash mphf
             //visitor.visit(m_ccs); // colors
             //visitor.visit(m_map); // map between mphf values and color classes
+        }
+        void load_colormapper(std::string dirname){
+            m_colormapper = colormapper::load(dirname + "/colormapper");
+        }
+
+        void load_colorsets(std::string dirname){
+            colorsets::load(m_colorsets, dirname + "/colorsets");
+        }
+
+        // Getter for colorsets used when spawning threads for queries
+        colorsets& get_colorsets() noexcept {
+            return m_colorsets;
         }
 
     private:
@@ -97,13 +110,10 @@ class index
         // in index_build.hpp, classic index with Minimizer library
         ////
         uint64_t get_file_size(const std::string& filen) const;
-        static bool Sgreater_func (const element& e1, const element& e2);
-        static bool Sequal_func (const element& e1, const element& e2);
-        void process(const std::string& ifile, std::vector<element>& buffer, int n_colors);
 
         void build(build::options_t& build_parameters);
 
-        //std::vector<scored_id> ranking_mixed_intersection(std::vector<std::pair<typename ColorClasses::row_accessor, color_t>>&& color_id_itrs, uint64_t threshold) const noexcept;
+        std::vector<scored_id> ranking_mixed_intersection(colorsets_accessor& parser, std::vector<std::pair<std::uint32_t, uint32_t>>&& ccids_counts, uint64_t threshold) const noexcept;
         
         ////
         // members
@@ -115,10 +125,12 @@ class index
         uint64_t seed;
         bool canonical;
         double pthash_constant;
-        colorsets_accessor m_colorsets; // colors
+        colorsets m_colorsets; // colors
         colormapper m_colormapper; // map between mphf values and color classes
         pthash_minimizers_mphf_t hf; // minimizer mphf
 };
+
+        
 
 
 } // namespace minimizer

@@ -149,7 +149,7 @@ struct colormapper {
     };
 
 
-    // -------- COMPACT VECTOR ----------
+    // -------- COLORMAPPER  ----------
     colormapper() : m_total_elements(0), m_width(0), m_mask(0) {}
 
     static colormapper load(const std::string& basename) {
