@@ -1,7 +1,8 @@
 .DS_Store
 .vscode
-build*
+/build/
 debug_build
 mphfs
 data
 example/salmonella*
+example/*result*.txt
