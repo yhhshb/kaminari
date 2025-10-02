@@ -5,3 +5,4 @@ debug_build
 mphfs
 data
 example/salmonella*
+example/*result*.txt
