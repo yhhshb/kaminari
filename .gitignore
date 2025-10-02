@@ -6,3 +6,4 @@ mphfs
 data
 example/salmonella*
 example/*result*.txt
+example/salmo_index
