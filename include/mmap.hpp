@@ -295,27 +295,82 @@ public:
     };
 
     enum class mmap_flag : int
-    {
-      shared = MAP_SHARED,
-      priv = MAP_PRIVATE,
-      shared_validate = MAP_SHARED_VALIDATE,
-      anon = MAP_ANON,
-      anonymous = MAP_ANONYMOUS,
-      denywrite = MAP_DENYWRITE,
-      executable = MAP_EXECUTABLE,
-      file = MAP_FILE,
-      fixed = MAP_FIXED,
-      fixed_noreplace = MAP_FIXED_NOREPLACE,
-      growsdown = MAP_GROWSDOWN,
-      hugetlb = MAP_HUGETLB,
-      locked = MAP_LOCKED,
-      nonblock = MAP_NONBLOCK,
-      noreserve = MAP_NORESERVE,
-      populate = MAP_POPULATE,
-      stack = MAP_STACK,
-      sync = MAP_SYNC,
-      huge_shift = MAP_HUGE_SHIFT
-    };
+{
+    shared = MAP_SHARED,
+    priv = MAP_PRIVATE,
+    
+#ifdef MAP_SHARED_VALIDATE
+    shared_validate = MAP_SHARED_VALIDATE,
+#else
+    shared_validate = MAP_SHARED, // fallback
+#endif
+
+#ifdef MAP_ANON
+    anon = MAP_ANON,
+#else
+    anon = MAP_ANONYMOUS, // fallback if MAP_ANON not defined
+#endif
+
+    anonymous = MAP_ANONYMOUS,
+
+#ifdef MAP_DENYWRITE
+    denywrite = MAP_DENYWRITE,
+#endif
+
+#ifdef MAP_EXECUTABLE
+    executable = MAP_EXECUTABLE,
+#endif
+
+    file = MAP_FILE,
+
+#ifdef MAP_FIXED
+    fixed = MAP_FIXED,
+#else
+    fixed = MAP_SHARED, // fallback
+#endif
+
+#ifdef MAP_FIXED_NOREPLACE
+    fixed_noreplace = MAP_FIXED_NOREPLACE,
+#else
+    fixed_noreplace = MAP_FIXED, // fallback
+#endif
+
+#ifdef MAP_GROWSDOWN
+    growsdown = MAP_GROWSDOWN,
+#endif
+
+#ifdef MAP_HUGETLB
+    hugetlb = MAP_HUGETLB,
+#endif
+
+#ifdef MAP_LOCKED
+    locked = MAP_LOCKED,
+#endif
+
+#ifdef MAP_NONBLOCK
+    nonblock = MAP_NONBLOCK,
+#endif
+
+#ifdef MAP_NORESERVE
+    noreserve = MAP_NORESERVE,
+#endif
+
+#ifdef MAP_POPULATE
+    populate = MAP_POPULATE,
+#endif
+
+#ifdef MAP_STACK
+    stack = MAP_STACK,
+#endif
+
+#ifdef MAP_SYNC
+    sync = MAP_SYNC,
+#endif
+
+#ifdef MAP_HUGE_SHIFT
+    huge_shift = MAP_HUGE_SHIFT,
+#endif
+};
 
     enum class mmap_prot : int
     {
