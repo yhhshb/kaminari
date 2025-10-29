@@ -21,7 +21,7 @@ void
 index::build(build::options_t& build_parameters)
 {
     //STEP 1 : PARSE FILES =====================================================
-    if (build_parameters.verbose > 0) std::cerr << "Step 1 & 2: parsing " << nb_docs << " files and merging results\n";
+    if (build_parameters.verbose >= 1) std::cout << "[I] Step 1 & 2: parsing " << nb_docs << " files and merging results\n";
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -41,12 +41,17 @@ index::build(build::options_t& build_parameters)
         false, false, false // -> dont skip minmer step, dont keep tmp files
     );
 
+    std::cout << "\n[TEMP] Minimizers Done \n\n";
+
     vector<std::string>().swap(build_parameters.input_filenames); //free memory
 
-    std::cerr << "Time for reading minimizers + sort them: " <<
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - start_time).count() <<
-        " milliseconds\n";
+    if (build_parameters.verbose >= 1){
+        std::cout << "[I] Step 1 & 2 (parsing/merging) time: " <<
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - start_time).count() <<
+            " milliseconds\n";
+    }
+    
 
     std::string Bzhminmer_file = Bzhminmer_tmp_file + "." + std::to_string(nb_docs) + "c";
 
@@ -76,7 +81,7 @@ index::build(build::options_t& build_parameters)
 
     //STEP 3 : BUILDING MPHF ===================================================
     {
-        if (build_parameters.verbose > 0) std::cerr << "Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
+        if (build_parameters.verbose >= 1) std::cout << "[I] Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
         start_time = std::chrono::high_resolution_clock::now();
         int backup, redirect;
         fflush(stdout);
@@ -93,12 +98,16 @@ index::build(build::options_t& build_parameters)
         close(backup);
         assert(hf.num_keys() == unique_minmers.size());
 
-        std::cerr << "Time for MPHF build: " << 
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::high_resolution_clock::now() - start_time).count() << 
-            " milliseconds\n";
-
-        std::cerr << "size of MPHF : " << hf.num_bits()/8 << " Bytes\n";
+        if (build_parameters.verbose >= 1) {
+            std::cout << "[I] Step 3 (MPHF) time: " << 
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::high_resolution_clock::now() - start_time).count() << 
+                " milliseconds\n";
+        }
+        
+        if (build_parameters.verbose >= 2) {
+            std::cout << "[II] MPHF Size : " << hf.num_bits()/8 << " Bytes\n";
+        }
 
         ankerl::unordered_dense::set<uint64_t>().swap(unique_minmers); //free memory
     }
@@ -114,9 +123,8 @@ index::build(build::options_t& build_parameters)
 
     //STEP 4.1 : COLORSETS DEDUP + STORING ====================================
     {
-        if (build_parameters.verbose > 0) std::cerr << "Step 4.1: colors deduplication and storing: ColorSets\n";
+        if (build_parameters.verbose >= 1) std::cout << "[I] Step 4.1: colors deduplication and storing: ColorSets\n";
         start_time = std::chrono::high_resolution_clock::now();
-        
         
         FILE* fout = fopen(minmer_to_cid_tmp_file.c_str(), "wb+");
         if (!fout) throw std::runtime_error("Cannot open tmp minmer-cid file");
@@ -188,15 +196,17 @@ index::build(build::options_t& build_parameters)
         fflush(fout);
         fclose(fout);
         
-        std::cerr << "Time for ColorSets: " << 
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - start_time).count() << 
-        " milliseconds\n";
+        if (build_parameters.verbose >= 1){
+            std::cout << "[I] Step 4.1 (ColorSets) time: " << 
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::high_resolution_clock::now() - start_time).count() << 
+                " milliseconds\n";
+        }
     }
 
     //STEP 5 : COLORMAPPER  =============================================
     {
-        if (build_parameters.verbose > 0) std::cerr << "Step 4.2: mapping hash -> minimizer: ColorMapper\n";
+        if (build_parameters.verbose >= 1) std::cout << "Step 4.2: mapping hash -> minimizer: ColorMapper\n";
         start_time = std::chrono::high_resolution_clock::now();
 
         FILE* ffinal = fopen(minmer_to_cid_tmp_file.c_str(), "rb");
@@ -263,10 +273,13 @@ index::build(build::options_t& build_parameters)
         
         fclose(ffinal);
 
-        std::cerr << "Time for ColorMapper: " << 
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - start_time).count() << 
-        " milliseconds\n";
+        if (build_parameters.verbose >= 1){
+            std::cout << "Step 4.2 (ColorMapper) time: " << 
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::high_resolution_clock::now() - start_time).count() << 
+                " milliseconds\n";
+        }
+        
     }
 
     std::remove(Bzhminmer_file.c_str());

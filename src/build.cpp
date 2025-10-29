@@ -29,7 +29,7 @@ int main(const argparse::ArgumentParser& parser)
     saver saver(out);
     idx.visit(saver); //only MPHF & metadata; CM & CS saved during index build
 
-    if (opts.verbose) std::cerr << "Written " << saver.get_byte_size() << " Bytes (metadata)\n";
+    if (opts.verbose >= 2) std::cerr << "[II] Written " << saver.get_byte_size() << " Bytes (metadata)\n";
     return 0;
 }
 
