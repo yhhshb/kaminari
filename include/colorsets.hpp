@@ -9,7 +9,7 @@
 
 struct colorsets {
     struct builder {
-        builder(std::string basename, size_t num_docs, size_t ram_limit_bytes = 256ull<<20)
+        builder(std::string basename, size_t num_docs, size_t ram_limit_bytes = 256ull<<20, size_t verbose = 0)
             : m_num_docs(num_docs),
             m_sparse_set_threshold_size(0.25 * num_docs),
             m_dense_set_threshold_size(0.75 * num_docs),
@@ -19,9 +19,12 @@ struct colorsets {
         {
             m_building_offsets.push_back(0);
 
-            std::cerr << "Creating colorsets_builder with " << num_docs << " documents\n" << 
-                            "sparse set threshold size: " << m_sparse_set_threshold_size << "\n" <<
-                            "dense set threshold size: " << m_dense_set_threshold_size << "\n";
+            if (verbose >= 2) {
+                std::cout << "[II] Creating colorsets_builder with " << num_docs << " documents\n" << 
+                            "\t\tsparse set threshold size: " << m_sparse_set_threshold_size << "\n" <<
+                            "\t\tdense set threshold size: " << m_dense_set_threshold_size << "\n";
+            }
+            
         }
 
         void add_color_set(uint32_t const * const colors, size_t list_size) {
@@ -81,7 +84,7 @@ struct colorsets {
             m_building_offsets.push_back(m_colors.size());  
         }
 
-        void build() {
+        void build(size_t verbose) {
             m_colors.flush_all();
                         
             m_offsets = bit::ef::array(
@@ -94,12 +97,16 @@ struct colorsets {
             m_building_offsets.clear();
             m_building_offsets.shrink_to_fit();
 
-            std::cerr << 
-                "Colorsets_builder stats:\n" <<
-                "\tprocessed " << m_offsets.size() - 1 << " unique color sets\n" <<
-                "\tstored " << m_colors.size() << " bits (" << (m_colors.size()/8.0)/1048576.0 << " MB)\n" <<
-                "\tstored " << m_offsets.bit_size() << " bits for offsets (" << (m_offsets.bit_size()/8.0)/1048576.0 << " MB)\n" <<
-                "\ttotal bits = " << (m_offsets.bit_size() + m_colors.size()) << " (" << (m_offsets.bit_size() + m_colors.size())/8.0/1048576.0 << " MB)\n";
+            if (verbose >= 2){
+                std::cout << 
+                "[II] Colorsets_builder stats:\n" <<
+                "\t\tprocessed " << m_offsets.size() - 1 << " unique color sets\n" <<
+                "\t\tstored " << m_colors.size() << " bits (" << (m_colors.size()/8.0)/1048576.0 << " MB)\n" <<
+                "\t\tstored " << m_offsets.bit_size() << " bits for offsets (" << (m_offsets.bit_size()/8.0)/1048576.0 << " MB)\n" <<
+                "\t\ttotal bytes = " << (m_offsets.bit_size() + m_colors.size()) << " (" << (m_offsets.bit_size() + m_colors.size())/8.0/1048576.0 << " MB)\n";
+            }
+
+            
         }
 
         private:

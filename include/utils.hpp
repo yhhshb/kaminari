@@ -20,6 +20,13 @@ std::string getExecutablePath();
 
 void create_directory(std::string dirname);
 
+uint64_t bits_needed(uint64_t b);
+
+uint64_t sparse_colors_bits(uint64_t total_colors);
+
+uint64_t get_file_size(const std::string& filen);
+
+
 //defined here because template
 template<class ForwardIt>
 ForwardIt unique_accumulate(ForwardIt first, ForwardIt last)

@@ -99,15 +99,11 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.threshold_ratio = std::stof(ratio_str);
 
     if (opts.threshold_ratio <= 0.0 || opts.threshold_ratio > 1.0) {
-        std::cerr << "Warning: kmer ratio needs to be somewhere in ]0.0, 1.0] , setting it to 1.0\n";
+        std::cout << "Warning: kmer ratio needs to be somewhere in ]0.0, 1.0] , setting it to 1.0\n";
         opts.threshold_ratio = 1;
     }
 
     opts.verbose = parser.get<std::size_t>("--verbose");
-
-    // if (opts.check and opts.nthreads != 1) {
-    //     std::cerr << "[Warning] Checking does not support multi-threading\n";
-    // }
 
     // check if input is a list of filenames or fasta files
     if (opts.input_filenames.size() == 1 && 
@@ -131,7 +127,7 @@ int main(const argparse::ArgumentParser& parser)
         std::ifstream in(opts.index_dirname + "/index.kaminari", std::ios::binary);
         loader loader(in);
         idx.visit(loader);
-        if (opts.verbose) std::cerr << "Read " << loader.get_byte_size() << " Bytes (metadata)\n";
+        if (opts.verbose >= 2) std::cout << "[II] Read " << loader.get_byte_size() << " Bytes of metadata\n";
 
         idx.load_colormapper(opts.index_dirname);
         idx.load_colorsets(opts.index_dirname);
@@ -152,9 +148,12 @@ int main(const argparse::ArgumentParser& parser)
     std::chrono::steady_clock::time_point begin;
     begin = std::chrono::steady_clock::now();
 
+
     if (opts.nthreads == 1) {
         opts.nthreads += 1;
-        std::cerr << "1 thread was specified, but an additional thread will be allocated for parsing\n";
+        if (opts.verbose >= 2){
+            std::cout << "[II] 1 thread was specified, but an additional thread will be allocated for parsing\n";
+        }
     }
     
     //prep parser + threads
@@ -164,8 +163,8 @@ int main(const argparse::ArgumentParser& parser)
     std::vector<std::thread> workers;
     std::mutex ofile_mut;
 
-    if (opts.verbose > 0){
-        std::cerr << "Start queries, threshold=" << opts.threshold_ratio << "\n";
+    if (opts.verbose >= 2){
+        std::cout << "[II] Start queries, threshold=" << opts.threshold_ratio << "\n";
     } 
     for (uint64_t i = 1; i != opts.nthreads; ++i) {
         workers.push_back(
@@ -181,7 +180,10 @@ int main(const argparse::ArgumentParser& parser)
     for (auto& w : workers) { w.join(); }
     rparser.stop();
 
-    std::cerr << "Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
+    if (opts.verbose >= 1){
+        std::cout << "[I] Query all seqs in " << opts.input_filenames << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "ms" << std::endl;
+    }
+    
 
     return 0;
 }

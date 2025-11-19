@@ -16,20 +16,26 @@ options_t check_args(const argparse::ArgumentParser& parser);
 
 int main(const argparse::ArgumentParser& parser) 
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     auto opts = check_args(parser);
     utils::create_directory(opts.output_dirname);
     utils::create_directory(opts.output_dirname+"/tmp");
     minimizer::index idx(opts); //builds colormapper (CM) & colorsets (CS)
-    if (opts.verbose) {
-        idx.memory_breakdown(std::cerr);
-        std::cerr << "\n";
-    }
 
     std::ofstream out(opts.output_dirname + "/index.kaminari", std::ios::binary);
     saver saver(out);
     idx.visit(saver); //only MPHF & metadata; CM & CS saved during index build
 
-    if (opts.verbose >= 2) std::cerr << "[II] Written " << saver.get_byte_size() << " Bytes (metadata)\n";
+    if (opts.verbose >= 2) std::cerr << "[II] Written " << saver.get_byte_size() << " Bytes of metadata\n";
+
+    if (opts.verbose >= 1){
+        std::cout << "[I] Build time: " <<
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - start_time).count() <<
+            " milliseconds\n";
+    }
+
     return 0;
 }
 
@@ -78,7 +84,7 @@ argparse::ArgumentParser get_parser()
         .scan<'f', double>()
         .default_value(double(4));
     parser.add_argument("-v", "--verbose")
-        .help("increase output verbosity")
+        .help("tool verbosity level (0 = silent, 1 = times, 2 = times & stats, 3 = debug)")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(0));
     return parser;

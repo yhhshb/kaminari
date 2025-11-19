@@ -33,7 +33,8 @@ struct colormapper {
     builder(const std::string& basename,
             uint64_t total_elements,
             uint64_t width,
-            uint64_t ram_limit_bytes = 256ull<<20)
+            uint64_t ram_limit_bytes = 256ull<<20
+    )
         : m_basename(basename),
           m_total_elements(total_elements),
           m_width(width),
@@ -111,7 +112,7 @@ struct colormapper {
             return std::min(m_chunk_capacity, m_total_elements - m_first_chunk_index);
         }
 
-        void build() {
+        void build(size_t verbose) {
             flush();
             if (m_out) std::fclose(m_out);
 
@@ -122,11 +123,13 @@ struct colormapper {
             std::fwrite(&header, sizeof(header), 1, meta);
             std::fclose(meta);
 
-            std::cerr << 
-                "ColorMapper stats:\n" <<
-                "\tcontains " << m_total_elements << " slots (1/minimizer)\n" <<
-                "\tbits/slot = " << m_width << "\n" <<
-                "\ttotal bits = " << words_for(m_total_elements * m_width)*64 << " (" << words_for(m_total_elements * m_width)*64/8.0/1048576.0 << " MB)\n";
+            if (verbose >= 2)
+
+            std::cout << 
+                "[II] ColorMapper stats:\n" <<
+                "\t\tcontains " << m_total_elements << " slots (1/minimizer)\n" <<
+                "\t\tbits/slot = " << m_width << "\n" <<
+                "\t\ttotal bytes = " << words_for(m_total_elements * m_width)*64 << " (" << words_for(m_total_elements * m_width)*64/8.0/1048576.0 << " MB)\n";
         }
 
         uint64_t chunk_capacity() const { return m_chunk_capacity; }

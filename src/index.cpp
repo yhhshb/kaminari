@@ -28,20 +28,6 @@ index::index(build::options_t& build_parameters)
 }
 
 
-void index::memory_breakdown(std::ostream& out) const noexcept
-{
-    libra scale;
-    out << "The MPHF of minimizers weights: " << hf.num_bits() / 8 << " Bytes\n";
-    //scale.visit(m_ccs);
-    //out << "Colors weight: " << scale.get_byte_size() << " Bytes\n";
-    //scale.reset();
-    //TODO:fix this
-    //scale.visit(m_map);
-    //out << "The mapping from minimizers to colors weights: " << m_map.num_bytes() << " Bytes\n";
-    //scale.reset();
-}
-
-
 typename index::pthash_opt_t index::get_pthash_options(build::options_t& build_parameters)
 {
     pthash_opt_t opts;
