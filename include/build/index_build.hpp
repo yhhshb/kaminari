@@ -380,6 +380,7 @@ index::build(build::options_t& build_parameters)
     }
 
     std::remove(Bzhminmer_file.c_str());
+    std::remove(Bzhminmer_file_sparse.c_str());
     std::remove(minmer_to_cid_tmp_file.c_str());
 }
 
