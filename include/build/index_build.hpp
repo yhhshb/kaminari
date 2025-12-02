@@ -89,7 +89,7 @@ index::build(build::options_t& build_parameters)
             uint64_t list_size = input_buffer[buf_idx] >> list_size_shift;
             buf_idx += (list_size + granularity) / granularity;
             if (buf_idx >= got) {
-                buf_idx = 0;
+                buf_idx = buf_idx - got;
                 got = fread(input_buffer.data(), sizeof(uint64_t), input_buffer_elems*elem_words, finput_sparse);
             }
         }
