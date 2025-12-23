@@ -32,7 +32,9 @@ index::build(build::options_t& build_parameters)
         8,
         "crumsort",
         build_parameters.verbose,
-        false, false, false // -> dont skip minmer step, dont keep tmp files
+        false, 
+        build_parameters.keep_tmp_files, 
+        build_parameters.keep_tmp_files 
     );  
 
     vector<std::string>().swap(build_parameters.input_filenames); //free memory
@@ -344,9 +346,12 @@ index::build(build::options_t& build_parameters)
         
     }
 
-    std::remove(Bzhminmer_file.c_str());
-    std::remove(Bzhminmer_file_sparse.c_str());
-    std::remove(minmer_to_cid_tmp_file.c_str());
+    //CLEANING TMP FILES =======================================================
+    if (!build_parameters.keep_tmp_files) {
+        std::remove(Bzhminmer_file.c_str());
+        std::remove(Bzhminmer_file_sparse.c_str());
+        std::remove(minmer_to_cid_tmp_file.c_str());
+    }
 }
 
 } // namespace minimizer

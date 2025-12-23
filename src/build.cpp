@@ -83,6 +83,10 @@ argparse::ArgumentParser get_parser()
         .help("PTHash build constant, higher = slower but more space efficient")
         .scan<'f', double>()
         .default_value(double(4));
+    parser.add_argument("-K", "--keep-tmp-files")
+        .help("keep temporary files")
+        .default_value(false)
+        .implicit_value(true);
     parser.add_argument("-v", "--verbose")
         .help("tool verbosity level (0 = silent, 1 = times, 2 = times & stats, 3 = debug)")
         .scan<'d', std::size_t>()
@@ -118,6 +122,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
+    opts.keep_tmp_files = parser.get<bool>("--keep-tmp-files");
     opts.verbose = parser.get<std::size_t>("--verbose");
 
     if (opts.input_filenames.size() == 1){

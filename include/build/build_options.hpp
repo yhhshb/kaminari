@@ -16,6 +16,7 @@ struct options_t {
     std::string output_dirname;
     uint8_t nthreads;
     std::size_t max_ram_MB;
+    bool keep_tmp_files;
     std::size_t verbose;
 };
 } // namespace kaminari::build

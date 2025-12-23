@@ -95,6 +95,7 @@ Run `./kaminari` to see a list of available tools.
  + `-t` or `--threads`. The number of threads allocated for kaminari. Kaminari will try to use them all for better performances. Default: 1
  + `-s` or `--seed`. The seed for murmurhash hash function used for determining minimizers. Two indexes with different seeds will have different results but this parameter should not be changed unless you know what you are doing. Default: 42
  + `-c` or `--pthash-constant`. The PTHash (MPHF) build constant, see pthash paper for details. Higher `c` leads to slower construction but more space efficient MPHF. Default: 4
+ + `-K` or `--keep-tmp-files`. Keep temporary files at any steps. Might cause a crash if not enough space on disk. Default: OFF
  + `-v` or `--verbose`: The output verbosity level. Goes from 1 (global steps) to 5 (debug). Default: 0
 
 
