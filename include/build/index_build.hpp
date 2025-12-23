@@ -2,6 +2,7 @@
 #define INDEX_BUILD_HPP
 
 #include "../../bundled/Minimizers/lib/BreiZHMinimizer.hpp"
+#include "lz4_file_helper.hpp"
 #include "../constants.hpp"
 #include "../colorsets.hpp"
 #include "../utils.hpp"
@@ -44,8 +45,8 @@ index::build(build::options_t& build_parameters)
     }
     
 
-    std::string Bzhminmer_file = Bzhminmer_tmp_file + "." + std::to_string(nb_docs) + "c";
-    std::string Bzhminmer_file_sparse = Bzhminmer_tmp_file + "_sparse." + std::to_string(nb_docs) + "c";
+    std::string Bzhminmer_file = Bzhminmer_tmp_file + "." + std::to_string(nb_docs) + "c.lz4";
+    std::string Bzhminmer_file_sparse = Bzhminmer_tmp_file + "_sparse." + std::to_string(nb_docs) + "c.lz4";
 
     // creating input reading buffer
     uint64_t elem_words = 1 + ((nb_docs + 63)/64); // number of uint64_t for 1 minmer + colors
@@ -55,47 +56,31 @@ index::build(build::options_t& build_parameters)
 
     ankerl::unordered_dense::set<uint64_t> unique_minmers;
 
-    //DENSE FILE
-    FILE* finput = fopen(Bzhminmer_file.c_str(), "rb");
-    if (!finput) throw std::runtime_error("Cannot open parsing-result file");
+    //DENSE FILE - minimizers
+    stream_reader* dense_parser = stream_reader_library::allocate(Bzhminmer_file);
     while (true) {
-        size_t got = fread(input_buffer.data(), elem_words * sizeof(uint64_t), input_buffer_elems, finput);
+        size_t got = dense_parser->read(input_buffer.data(), elem_words * sizeof(uint64_t), input_buffer_elems);
         if (got == 0) break;
         for (size_t i = 0; i < got; ++i) {
             uint64_t minimizer = input_buffer[i * elem_words];
             unique_minmers.insert(minimizer);
         }
     }
-    rewind(finput);
-
+    delete dense_parser;
     uint64_t nb_elems_dense = unique_minmers.size();
 
-    //SPARSE FILE (if exists)
-    uint64_t shift = utils::sparse_colors_bits(nb_docs);
-    uint64_t list_size_shift = 64 - shift;
-    uint64_t granularity = 64 / utils::sparse_colors_bits(nb_docs);
-    uint64_t granularity_log2 = utils::bits_needed(granularity) - 1; //avoid divisions later
-    uint64_t buf_idx = 0;
-    FILE* finput_sparse = fopen(Bzhminmer_file_sparse.c_str(), "rb");
-    if (finput_sparse) {
-        size_t got = fread(input_buffer.data(), sizeof(uint64_t), input_buffer_elems*elem_words, finput_sparse);
-        while (buf_idx < got) {
-            uint64_t minimizer = input_buffer[buf_idx++];
-            unique_minmers.insert(minimizer);
-            if (buf_idx >= got) {
-                buf_idx = 0;
-                got = fread(input_buffer.data(), sizeof(uint64_t), input_buffer_elems*elem_words, finput_sparse);
-            }
-            uint64_t list_size = input_buffer[buf_idx] >> list_size_shift;
-            buf_idx += (list_size + granularity) / granularity;
-            if (buf_idx >= got) {
-                buf_idx = buf_idx - got;
-                got = fread(input_buffer.data(), sizeof(uint64_t), input_buffer_elems*elem_words, finput_sparse);
-            }
-        }
+    //SPARSE FILE (if exists) - minimizers
+    kaminari::helpers::SparseFileParser sparse_parser(Bzhminmer_file_sparse);
+    if (sparse_parser.is_open()) {
+        uint64_t minimizer;
+        // Equivalent to 'shift' in your original code
+        uint64_t bits_per_color = utils::sparse_colors_bits(nb_docs);
 
-        rewind(finput_sparse);
-    } 
+        // Efficiently reads minimizers and skips payloads
+        while (sparse_parser.next_minimizer_only(minimizer, bits_per_color)) {
+            unique_minmers.insert(minimizer);
+        }
+    }
     
     uint64_t nb_elems = unique_minmers.size();
 
@@ -135,7 +120,7 @@ index::build(build::options_t& build_parameters)
     // common variables for CM & CS
     uint64_t ram_budget = static_cast<uint64_t>(build_parameters.max_ram_MB * 0.75); //75% of allocated RAM for CM & CS
 
-    std::string minmer_to_cid_tmp_file = build_parameters.output_dirname + "/tmp/minmer_cid.bin";
+    std::string minmer_to_cid_tmp_file = build_parameters.output_dirname + "/tmp/minmer_cid.bin.lz4";
     uint64_t output_buffer_elems = buffer_bytes / (2 * sizeof(uint64_t)); // number of (minmer-cid) for a 2MB buffer 
 
     uint64_t cid = -1; // starts at -1 so first unique set becomes 0
@@ -146,9 +131,7 @@ index::build(build::options_t& build_parameters)
         if (build_parameters.verbose >= 1) std::cout << "[I] Step 4.1: colors deduplication and storing: ColorSets\n";
         start_time = std::chrono::high_resolution_clock::now();
         
-        FILE* fout = fopen(minmer_to_cid_tmp_file.c_str(), "wb+");
-        if (!fout) throw std::runtime_error("Cannot open tmp minmer-cid file");
-
+        stream_writer* fout = stream_writer_library::allocate(minmer_to_cid_tmp_file);
         std::vector<uint64_t> output_buffer(output_buffer_elems * 2);
 
         uint64_t nb_words_colors = elem_words - 1;
@@ -164,10 +147,11 @@ index::build(build::options_t& build_parameters)
         uint64_t processed = 0;  // number of elements processed so far
         
         // DENSE FILE
+        stream_reader* dense_parser_step4 = stream_reader_library::allocate(Bzhminmer_file);
         while (processed < nb_elems_dense){
             // Read up to input_buf_elems elements
             size_t to_read = std::min(input_buffer_elems, nb_elems_dense - processed);
-            size_t got = fread(input_buffer.data(), elem_words * sizeof(uint64_t), to_read, finput);
+            size_t got = dense_parser_step4->read(input_buffer.data(), elem_words * sizeof(uint64_t), to_read);
             if (got != to_read) {
                 throw std::runtime_error("Error reading input file");
             }
@@ -198,100 +182,82 @@ index::build(build::options_t& build_parameters)
                 output_buffer[output_pos++] = (cid << build_parameters.b) | minmer_last_bits;
 
                 if (output_pos == output_buffer.size()) {
-                    fwrite(output_buffer.data(), sizeof(uint64_t), output_pos, fout);
+                    fout->write(output_buffer.data(), sizeof(uint64_t), output_pos);
                     output_pos = 0;
                 }
                 processed++;
             }
         }
+        delete dense_parser_step4;
 
-        buf_idx = 0;
-        if (finput_sparse) {
-            size_t got = fread(input_buffer.data(), sizeof(uint64_t), input_buffer_elems*elem_words, finput_sparse);
+        // SPARSE FILE
+        kaminari::helpers::SparseFileParser sparse_parser_step4(Bzhminmer_file_sparse);
+        if (sparse_parser_step4.is_open()) {
+            uint64_t minimizer;
+            std::vector<uint64_t> payload;
+            std::vector<uint64_t> last_sparse_colors; // Cache for deduplication
 
-            // Use a vector to hold the last color set, resized as needed
-            std::vector<uint64_t> last_sparse_colors;
+            // Bit-unpacking configuration
+            uint64_t bits_per_color = utils::sparse_colors_bits(nb_docs);
+            uint64_t shift = bits_per_color;
+            uint64_t list_size_shift = 64 - shift;
+            uint64_t granularity = 64 / shift;
+            uint64_t granularity_log2 = utils::bits_needed(granularity) - 1;
 
-            while (buf_idx < got) {
-                uint64_t key = input_buffer[buf_idx++];
-                if (buf_idx >= got) {
-                    // current elem is split between minmer and colors
-                    buf_idx = 0;
-                    got = fread(input_buffer.data(), sizeof(uint64_t), input_buffer_elems*elem_words, finput_sparse);
-                    if (got == 0) {
-                        throw std::runtime_error("unexpected EOF (post minmer)");
-                    }
-                }
-
-                uint64_t list_size = input_buffer[buf_idx] >> list_size_shift;
-                nb_words_colors = (list_size + granularity) / granularity;
-
-                if (buf_idx + nb_words_colors >= got) {
-                    // Current color is split between buffers, preserve tail and refill
-                    uint64_t tail_words = got - buf_idx;
-                    memcpy(input_buffer.data(), &input_buffer[buf_idx], tail_words * sizeof(uint64_t));
-                    buf_idx = 0;
-                    size_t read_more = fread(input_buffer.data() + tail_words,
-                                            sizeof(uint64_t),
-                                            input_buffer_elems*elem_words - tail_words,
-                                            finput_sparse);
-                    got = tail_words + read_more;
-                    if (got == 0) {
-                        throw std::runtime_error("unexpected EOF (in colors)");
-                    }
-                }
-
-                const uint64_t* color_words = &input_buffer[buf_idx];
-
-                // Resize last_sparse_colors if needed
-                if (last_sparse_colors.size() != nb_words_colors) {
-                    last_sparse_colors.resize(nb_words_colors);
-                }
-
-                // Compare with last color set safely
-                if (std::memcmp(color_words, last_sparse_colors.data(), nb_words_colors * sizeof(uint64_t)) != 0) {
+            // Loop efficiently extracts (Minimizer + Full Payload)
+            while (sparse_parser_step4.next_element(minimizer, payload, bits_per_color)) {
+                
+                // 1. Deduplication: Check if payload (header + colors) changed
+                if (last_sparse_colors != payload) {
+                    // Extract colors from the packed payload
+                    // payload[0] is the header, payload[1...] are packed colors
+                    uint64_t list_size = payload[0] >> list_size_shift;
+                    
                     std::vector<uint32_t> colors;
+                    colors.reserve(list_size);
+
                     for (size_t c = 1; c <= list_size; c++) {
-                        size_t word_idx = c >> granularity_log2; //= c / granularity;
-                        size_t pos_in_word = c & (granularity - 1); //= c % granularity;
-                        uint64_t word = color_words[word_idx];
+                        size_t word_idx = c >> granularity_log2;     // c / granularity
+                        size_t pos_in_word = c & (granularity - 1);  // c % granularity
+                        uint64_t word = payload[word_idx];
                         
                         uint32_t color = static_cast<uint32_t>(
                             (word >> ((granularity - 1 - pos_in_word) * shift)) & ((1ULL << shift) - 1)
                         );
                         colors.push_back(color);
                     }
+
+                    // Add unique set
                     cs_builder.add_color_set(colors.data(), list_size);
                     cid++;
-                    std::memcpy(last_sparse_colors.data(), color_words, nb_words_colors * sizeof(uint64_t));
+                    
+                    // Update cache (vector assignment handles deep copy)
+                    last_sparse_colors = payload;
                 }
 
-                // Output element: [key, cid+check_bits]
-                uint64_t minmer_last_bits = key & ((1UL << build_parameters.b)-1);
-                output_buffer[output_pos++] = hf(key); //hash of minmer
+                // 2. Output Writing: [Hash(minmer), CID + check_bits]
+                uint64_t minmer_last_bits = minimizer & ((1UL << build_parameters.b) - 1);
+                output_buffer[output_pos++] = hf(minimizer); 
                 output_buffer[output_pos++] = (cid << build_parameters.b) | minmer_last_bits;
 
                 if (output_pos == output_buffer.size()) {
-                    fwrite(output_buffer.data(), sizeof(uint64_t), output_pos, fout);
+                    fout->write(output_buffer.data(), sizeof(uint64_t), output_pos);
                     output_pos = 0;
                 }
 
-                buf_idx += nb_words_colors;
                 processed++;
             }
         }
 
-        // Flush remaining output
+        // Flush remaining output from buffer (handles both dense and sparse leftovers)
         if (output_pos > 0) {
-            fwrite(output_buffer.data(), sizeof(uint64_t), output_pos, fout);
+            fout->write(output_buffer.data(), sizeof(uint64_t), output_pos);
         }
 
         cs_builder.build(build_parameters.verbose);
 
         delete[] last_color_words;
-        fclose(finput);
-        fflush(fout);
-        fclose(fout);
+        delete fout;
         
         if (build_parameters.verbose >= 1){
             std::cout << "[I] Step 4.1 (ColorSets) time: " << 
@@ -304,10 +270,7 @@ index::build(build::options_t& build_parameters)
     //STEP 5 : COLORMAPPER  =============================================
     {
         if (build_parameters.verbose >= 1) std::cout << "[I] Step 4.2: mapping hash -> minimizer: ColorMapper\n";
-        start_time = std::chrono::high_resolution_clock::now();
-
-        FILE* ffinal = fopen(minmer_to_cid_tmp_file.c_str(), "rb");
-        if (!ffinal) throw std::runtime_error("Cannot open tmp minmer-cid file");
+        start_time = std::chrono::high_resolution_clock::now(); 
 
         colormapper::builder cm_builder(
             build_parameters.output_dirname + "/colormapper", 
@@ -322,10 +285,12 @@ index::build(build::options_t& build_parameters)
 
         // Each pass goes through the file completely
         while (high < nb_elems) {
+            stream_reader* ffinal = stream_reader_library::allocate(minmer_to_cid_tmp_file);
             size_t processed = 0;
             while (processed < nb_elems) {
                 size_t to_read = std::min(output_buffer_elems, nb_elems - processed);
-                size_t got = fread(final_buffer.data(), 2 * sizeof(uint64_t), to_read, ffinal);
+                size_t got = ffinal->read(final_buffer.data(), 2 * sizeof(uint64_t), to_read);
+
                 if (got != to_read) {
                     throw std::runtime_error("Error reading tmp minmer-cid file");
                 }
@@ -341,16 +306,17 @@ index::build(build::options_t& build_parameters)
                 processed += got;
             }
 
-            rewind(ffinal);
+            delete ffinal;
             low = high;
             high += cm_builder.flush();
         }
 
         // Final pass for the last chunk
+        stream_reader* ffinal = stream_reader_library::allocate(minmer_to_cid_tmp_file);
         size_t processed = 0;
         while (processed < nb_elems) {
             size_t to_read = std::min(output_buffer_elems, nb_elems - processed);
-            size_t got = fread(final_buffer.data(), 2 * sizeof(uint64_t), to_read, ffinal);
+            size_t got = ffinal->read(final_buffer.data(), 2 * sizeof(uint64_t), to_read);
             if (got != to_read) {
                 throw std::runtime_error("Error reading tmp minmer-cid file");
             }
@@ -365,11 +331,10 @@ index::build(build::options_t& build_parameters)
 
             processed += got;
         }
+        delete ffinal;
 
         cm_builder.build(build_parameters.verbose);
         
-        fclose(ffinal);
-
         if (build_parameters.verbose >= 1){
             std::cout << "[I] Step 4.2 (ColorMapper) time: " << 
                 std::chrono::duration_cast<std::chrono::milliseconds>(
