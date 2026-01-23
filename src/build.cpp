@@ -3,14 +3,12 @@
 #include <fstream>
 
 #include "../include/constants.hpp"
-#include "../include/index/index.hpp"
-#include "../include/index/index_build.hpp"
-#include "../include/index/index_build_metage.hpp"
-#include "../include/hybrid.hpp"
-#include "../include/utils.hpp"
-#include "../include/build_options.hpp"
-#include "../include/build.hpp"
+#include "../include/index.hpp"
+#include "../include/build/index_build.hpp"
+#include "../include/build/build_options.hpp"
+#include "../include/build/build.hpp"
 #include "../include/compact_vector.hpp"
+#include "../include/utils.hpp"
 
 namespace kaminari::build {
 
@@ -18,18 +16,26 @@ options_t check_args(const argparse::ArgumentParser& parser);
 
 int main(const argparse::ArgumentParser& parser) 
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     auto opts = check_args(parser);
-    minimizer::index<color_classes::hybrid, kaminari::compact_vector> idx(opts);
-    if (opts.verbose) {
-        idx.memory_breakdown(std::cerr);
-        std::cerr << "\n";
+    utils::create_directory(opts.output_dirname);
+    utils::create_directory(opts.output_dirname+"/tmp");
+    minimizer::index idx(opts); //builds colormapper (CM) & colorsets (CS)
+
+    std::ofstream out(opts.output_dirname + "/index.kaminari", std::ios::binary);
+    saver saver(out);
+    idx.visit(saver); //only MPHF & metadata; CM & CS saved during index build
+
+    if (opts.verbose >= 2) std::cerr << "[II] Written " << saver.get_byte_size() << " Bytes of metadata\n";
+
+    if (opts.verbose >= 1){
+        std::cout << "[I] Build time: " <<
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - start_time).count() <<
+            " milliseconds\n";
     }
-    if (opts.output_filename != "") {
-        std::ofstream out(opts.output_filename, std::ios::binary);
-        saver saver(out);
-        idx.visit(saver);
-        if (opts.verbose) std::cerr << "Written " << saver.get_byte_size() << " Bytes\n";
-    }
+
     return 0;
 }
 
@@ -42,9 +48,9 @@ argparse::ArgumentParser get_parser()
         .help("list of input files")
         .nargs(argparse::nargs_pattern::at_least_one)
         .required();
-    parser.add_argument("-o", "--output-filename")
-        .help("output index filename (\".kaminari\" advised)")
-        .default_value("index.kaminari");
+    parser.add_argument("-o", "--output-dirname")
+        .help("output index directory name")
+        .default_value("kaminari_index");
     parser.add_argument("-k")
         .help("k-mer length")
         .scan<'u', std::size_t>()
@@ -57,21 +63,14 @@ argparse::ArgumentParser get_parser()
         .help("canonical minimizers")
         .default_value(false)
         .implicit_value(true);
-    parser.add_argument("--metagenome")
-        .help("recommended for big (>1000docs) metagenomic data collection")
-        .default_value(false)
-        .implicit_value(true);
     parser.add_argument("-b", "--bit-check")
         .help("number of bits used to check minmers")
         .scan<'d', size_t>()
         .default_value(size_t(1));
-    parser.add_argument("-d", "--tmp-dir")
-        .help("temporary directory")
-        .default_value(std::string("."));
     parser.add_argument("-g", "--max-ram")
-        .help("RAM limit (GB)")
+        .help("RAM limit (MB)")
         .scan<'d', std::size_t>()
-        .default_value(std::size_t(4));
+        .default_value(std::size_t(8192));
     parser.add_argument("-t", "--threads")
         .help("number of threads")
         .scan<'u', std::size_t>()
@@ -84,8 +83,12 @@ argparse::ArgumentParser get_parser()
         .help("PTHash build constant, higher = slower but more space efficient")
         .scan<'f', double>()
         .default_value(double(4));
+    parser.add_argument("-K", "--keep-tmp-files")
+        .help("keep temporary files")
+        .default_value(false)
+        .implicit_value(true);
     parser.add_argument("-v", "--verbose")
-        .help("increase output verbosity")
+        .help("tool verbosity level (0 = silent, 1 = times, 2 = times & stats, 3 = debug)")
         .scan<'d', std::size_t>()
         .default_value(std::size_t(0));
     return parser;
@@ -96,8 +99,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     options_t opts;
     std::size_t tmp;
     opts.input_filenames = parser.get<std::vector<std::string>>("-i");
-    opts.output_filename = parser.get<std::string>("-o");
-    opts.tmp_dir = parser.get<std::string>("--tmp-dir");
+    opts.output_dirname = parser.get<std::string>("-o");
     
     tmp = parser.get<std::size_t>("-k");
     if (tmp >= constants::MAX_KMER_SIZE) throw std::invalid_argument("k-mer size must be < " + std::to_string(constants::MAX_KMER_SIZE));
@@ -112,15 +114,15 @@ options_t check_args(const argparse::ArgumentParser& parser)
 
     tmp = parser.get<std::size_t>("--max-ram");
     if (tmp == 0) {
-        std::cerr << "Warning: max ram = 0, setting it to 1 GB\n";
-        tmp = 1;
+        std::cerr << "Warning: max RAM = 0, setting it to 1 GB\n";
+        tmp = 1024;
     }
-    opts.max_ram = tmp;
+    opts.max_ram_MB = tmp;
     opts.seed = parser.get<uint64_t>("--seed");
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
     opts.canonical = parser.get<bool>("--canonical");
-    opts.metagenome = parser.get<bool>("--metagenome");
+    opts.keep_tmp_files = parser.get<bool>("--keep-tmp-files");
     opts.verbose = parser.get<std::size_t>("--verbose");
 
     if (opts.input_filenames.size() == 1){

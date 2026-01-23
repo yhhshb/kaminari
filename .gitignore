@@ -1,8 +1,12 @@
 .DS_Store
 .vscode
-build*
+/build/
 debug_build
 mphfs
 data
 example/salmonella*
 example/*result*.txt
+<<<<<<< HEAD
+=======
+example/salmo_index
+>>>>>>> origin/on_disk

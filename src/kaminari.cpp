@@ -1,6 +1,6 @@
 #include <iostream>
-#include "../include/build.hpp"
-#include "../include/query.hpp"
+#include "../include/build/build.hpp"
+#include "../include/query/query.hpp"
 #include "../include/rbo.hpp"
 
 using namespace kaminari;

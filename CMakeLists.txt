@@ -25,16 +25,12 @@ endif()
 if (UNIX)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g3 -fsanitize=address -fno-omit-frame-pointer")
+  
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-  if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-unused-function -Wno-unknown-attributes")
-  endif()
-  if (KAMINARI_USE_SANITIZERS)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
-  endif()
 endif()
 
 ## fetch latest argparse
@@ -50,11 +46,13 @@ include_directories(${PROJECT_SOURCE_DIR})
 ## kaminari 
 
 set(KAMINARI_SOURCES
-  src/utils.cpp
   src/build.cpp
   src/query.cpp
+  src/index.cpp
+  src/utils.cpp
+  src/ext_bit_parser.cpp
+  src/colorsets_accessor.cpp
   src/rbo.cpp
-  src/hybrid.cpp
 )
 
 # add_subdirectory(bundled/biolib)

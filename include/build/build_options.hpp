@@ -13,11 +13,10 @@ struct options_t {
     uint64_t seed;
     bool canonical;
     double pthash_constant;
-    std::string output_filename;
-    std::string tmp_dir;
+    std::string output_dirname;
     uint8_t nthreads;
-    std::size_t max_ram;
-    bool metagenome;
+    std::size_t max_ram_MB;
+    bool keep_tmp_files;
     std::size_t verbose;
 };
 } // namespace kaminari::build
