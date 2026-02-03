@@ -32,28 +32,26 @@ static int print_u128_u(uint128_t u128) {
 
 typedef build_configuration pthash_opt_t;
 
-typedef phobic<xxhash128> pthash_minimizers_mphf_t;  // this works
-// typedef phobic<murmurhash2_128> pthash_minimizers_mphf_t;  // this works
-// typedef pthash::dense_partitioned_phf<  // this works
-//     xxhash128,                          //
-//     pthash::opt_bucketer,               //
-//     pthash::mono_EF,                    //
-//     true,
-//     pthash::pthash_search_type::add_displacement  //
-//     >
-//     pthash_minimizers_mphf_t;
+
+typedef pthash::partitioned_phf<  
+    pthash::xxhash_128, //murmurhash2_64                     
+    pthash::opt_bucketer,               
+    pthash::compact,                    
+    true>
+    pthash_minimizers_mphf_t;
+
 
 pthash_opt_t get_pthash_options() {
     pthash_opt_t opts;
     opts.seed = 42;
     opts.lambda =
-        4;  // (too slow = try decreasing), higher lambda : more space efficient
-    opts.alpha = 0.97;  // was 0.94
-    opts.search = pthash::pthash_search_type::add_displacement;
-    opts.avg_partition_size = 3000;
+        5;  // (too slow = try decreasing), higher lambda : more space efficient
+    opts.alpha = 0.94;  // was 0.94
+    //opts.search = pthash::pthash_search_type::add_displacement;
+    opts.avg_partition_size = 3000000;
     opts.verbose = true;
 
-    // opts.ram = 256ULL * 1000000000;
+    opts.ram = 4ULL * 1000000000;
     opts.num_threads = 32;
     opts.tmp_dir = "/tmp";
 
@@ -69,46 +67,12 @@ int main() {
     for (size_t i = 0; i < 80000000; ++i) { minmers.push_back(i); }
 
     pthash_minimizers_mphf_t hf;
-    hf.build_in_internal_memory(minmers.begin(), minmers.size(),
+    hf.build_in_external_memory(minmers.begin(), minmers.size(),
                                 get_pthash_options());
 
     std::cout << "ALL GOOD: taking "
               << static_cast<double>(hf.num_bits()) / hf.num_keys()
               << " bits/key" << std::endl;
-
-    // emem::external_memory_vector<__uint128_t> emem(256ULL * 1000000000,
-    // "/tmp",
-    //                                                "final_merge");
-
-    // std::random_device rd;
-    // std::mt19937_64 gen(rd());
-    // std::uniform_int_distribution<uint64_t> dis;
-
-    // for (size_t i = 0; i < 2; ++i) {
-    //     __uint128_t high = dis(gen);
-    //     __uint128_t low = dis(gen);
-    //     emem.push_back((high << 64) | low);
-
-    //     std::cerr << "val pushed  = ";
-    //     print_u128_u((high << 64) | low);
-    //     std::cerr << "\n";
-    // }
-
-    // emem.minimize();
-    // std::cerr << "\n\n";
-
-    // for (auto it = emem.cbegin(); it != emem.cend(); ++it) {
-    //     std::cerr << "val = ";
-    //     print_u128_u(*it);
-    //     std::cerr << "\n";
-
-    //     std::cerr << "sup à 2^66 ? " << ((*it) > (__uint128_t{1} << 66))
-    //               << "\n";
-    // }
-
-    // __uint128_t max = std::numeric_limits<__uint128_t>::max();
-
-    // print_u128_u(max + 1);
 
     return 0;
 }

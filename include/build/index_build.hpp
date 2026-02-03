@@ -98,7 +98,7 @@ index::build(build::options_t& build_parameters)
         close(redirect);
 
         //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
-        hf.build_in_internal_memory(unique_minmers.begin(), unique_minmers.size(), get_pthash_options(build_parameters));
+        hf.build_in_external_memory(unique_minmers.begin(), unique_minmers.size(), get_pthash_options(build_parameters));
 
         fflush(stdout);
         dup2(backup, 1);

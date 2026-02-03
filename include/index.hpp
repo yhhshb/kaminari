@@ -83,15 +83,13 @@ class index
         }
 
     private:
+
         typedef pthash::build_configuration pthash_opt_t;
-        //typedef pthash::phobic<pthash::xxhash128> pthash_minimizers_mphf_t; //TODO: not sure about visit yet
-        typedef pthash::dense_partitioned_phf<  
-            pthash::xxhash128, //murmurhash2_64                     
+        typedef pthash::partitioned_phf<  
+            pthash::xxhash_128, //murmurhash2_64                     
             pthash::opt_bucketer,               
-            pthash::mono_EF,                    
-            true,
-            pthash::pthash_search_type::add_displacement  
-            >
+            pthash::compact,                    
+            true>
             pthash_minimizers_mphf_t;
 
         template <class Iterator>

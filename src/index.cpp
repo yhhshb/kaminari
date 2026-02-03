@@ -33,12 +33,11 @@ typename index::pthash_opt_t index::get_pthash_options(build::options_t& build_p
     pthash_opt_t opts;
     opts.seed = build_parameters.seed;
     opts.lambda = build_parameters.pthash_constant; // (too slow = try decreasing), higher lambda : more space efficient 
-    opts.alpha = 0.97; //was 0.94
-    opts.search = pthash::pthash_search_type::add_displacement;
-    opts.avg_partition_size = 3000;
-    opts.verbose = (build_parameters.verbose > 0);
+    opts.alpha = 0.94;
+    opts.avg_partition_size = 3000000;
+    opts.verbose = (build_parameters.verbose > 2);
     
-    opts.ram = build_parameters.max_ram_MB * constants::GB;
+    opts.ram = build_parameters.max_ram_MB * constants::MB;
     opts.num_threads = build_parameters.nthreads;
     opts.tmp_dir = build_parameters.output_dirname + "/tmp";
 
