@@ -51,8 +51,8 @@ pthash_opt_t get_pthash_options() {
     opts.avg_partition_size = 3000000;
     opts.verbose = true;
 
-    opts.ram = 4ULL * 1000000000;
-    opts.num_threads = 32;
+    opts.ram = 2ULL * 1024*1024*1024;
+    opts.num_threads = 1;
     opts.tmp_dir = "/tmp";
 
     opts.dense_partitioning = true;
@@ -62,9 +62,9 @@ pthash_opt_t get_pthash_options() {
 
 int main() {
     std::vector<uint64_t> minmers;
-    minmers.reserve(80000000);
+    minmers.reserve(800000000);
 
-    for (size_t i = 0; i < 80000000; ++i) { minmers.push_back(i); }
+    for (size_t i = 0; i < 800000000; ++i) { minmers.push_back(i); }
 
     pthash_minimizers_mphf_t hf;
     hf.build_in_external_memory(minmers.begin(), minmers.size(),

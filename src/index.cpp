@@ -37,7 +37,7 @@ typename index::pthash_opt_t index::get_pthash_options(build::options_t& build_p
     opts.avg_partition_size = 3000000;
     opts.verbose = (build_parameters.verbose > 2);
     
-    opts.ram = build_parameters.max_ram_MB * constants::MB;
+    opts.ram = build_parameters.max_ram_MB * constants::MB / 2;
     opts.num_threads = build_parameters.nthreads;
     opts.tmp_dir = build_parameters.output_dirname + "/tmp";
 

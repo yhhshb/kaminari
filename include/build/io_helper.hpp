@@ -1,5 +1,5 @@
-#ifndef LZ4_FILE_HELPER_HPP
-#define LZ4_FILE_HELPER_HPP
+#ifndef IO_HELPER_HPP
+#define IO_HELPER_HPP
 
 #include "../../bundled/Minimizers/src/files/stream_reader_library.hpp"
 #include "../../bundled/Minimizers/src/files/stream_writer_library.hpp"
@@ -163,7 +163,80 @@ private:
     }
 };
 
+class BinaryFileIterator {
+public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type        = uint64_t;
+    using difference_type   = std::ptrdiff_t;
+    using pointer           = const uint64_t*;
+    using reference         = const uint64_t&;
+
+    // Constructor
+    BinaryFileIterator(const std::string& filename, size_t buffer_size_bytes = 4 * 1024 * 1024)
+        : _buffer_pos(0), _is_end(false) 
+    {
+        // Allocate the stream on the heap and manage via shared_ptr
+        _stream = std::make_shared<std::ifstream>(filename, std::ios::binary);
+        
+        if (!_stream->is_open()) {
+            _is_end = true;
+        } else {
+            _buffer.resize(buffer_size_bytes / sizeof(uint64_t));
+            fill_buffer();
+        }
+    }
+
+    // Default constructor (End Iterator)
+    BinaryFileIterator() 
+        : _buffer_pos(0), _is_end(true) 
+    {}
+
+    uint64_t operator*() const {
+        return _buffer[_buffer_pos];
+    }
+
+    BinaryFileIterator& operator++() {
+        _buffer_pos++;
+        if (_buffer_pos >= _items_in_buffer) {
+            fill_buffer();
+        }
+        return *this;
+    }
+
+    bool operator!=(const BinaryFileIterator& other) const {
+        return _is_end != other._is_end;
+    }
+    
+    BinaryFileIterator(const BinaryFileIterator&) = default;
+    BinaryFileIterator& operator=(const BinaryFileIterator&) = default;
+
+private:
+    std::shared_ptr<std::ifstream> _stream; 
+    std::vector<uint64_t> _buffer;
+    size_t _buffer_pos;
+    size_t _items_in_buffer = 0;
+    bool _is_end;
+
+    void fill_buffer() {
+        if (!_stream || !_stream->is_open()) { 
+            _is_end = true;
+            return;
+        }
+        
+        _stream->read(reinterpret_cast<char*>(_buffer.data()), _buffer.size() * sizeof(uint64_t));
+        std::streamsize bytes_read = _stream->gcount(); 
+
+        if (bytes_read == 0) {
+            _is_end = true;
+            return;
+        }
+
+        _items_in_buffer = bytes_read / sizeof(uint64_t);
+        _buffer_pos = 0;
+    }
+};
+
 } // namespace helpers
 } // namespace kaminari
 
-#endif // LZ4_FILE_HELPER_HPP
+#endif // IO_HELPER_HPP

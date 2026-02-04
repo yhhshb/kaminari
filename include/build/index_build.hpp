@@ -2,7 +2,7 @@
 #define INDEX_BUILD_HPP
 
 #include "../../bundled/Minimizers/lib/BreiZHMinimizer.hpp"
-#include "lz4_file_helper.hpp"
+#include "io_helper.hpp"
 #include "../constants.hpp"
 #include "../colorsets.hpp"
 #include "../utils.hpp"
@@ -56,54 +56,91 @@ index::build(build::options_t& build_parameters)
     uint64_t input_buffer_elems = buffer_bytes / (elem_words * sizeof(uint64_t)); // number of elems for a 2MB buffer 
     std::vector<uint64_t> input_buffer(input_buffer_elems * elem_words);
 
-    ankerl::unordered_dense::set<uint64_t> unique_minmers;
+    std::string temp_flat_file = "temp_minimizers_flat.bin";
+    uint64_t nb_elems = 0;
+    uint64_t nb_elems_dense;
 
-    //DENSE FILE - minimizers
-    stream_reader* dense_parser = stream_reader_library::allocate(Bzhminmer_file);
-    while (true) {
-        size_t got = dense_parser->read(input_buffer.data(), elem_words * sizeof(uint64_t), input_buffer_elems);
-        if (got == 0) break;
-        for (size_t i = 0; i < got; ++i) {
-            uint64_t minimizer = input_buffer[i * elem_words];
-            unique_minmers.insert(minimizer);
-        }
-    }
-    delete dense_parser;
-    uint64_t nb_elems_dense = unique_minmers.size();
-
-    //SPARSE FILE (if exists) - minimizers
-    kaminari::helpers::SparseFileParser sparse_parser(Bzhminmer_file_sparse);
-    if (sparse_parser.is_open()) {
-        uint64_t minimizer;
-        // Equivalent to 'shift' in your original code
-        uint64_t bits_per_color = utils::sparse_colors_bits(nb_docs);
-
-        // Efficiently reads minimizers and skips payloads
-        while (sparse_parser.next_minimizer_only(minimizer, bits_per_color)) {
-            unique_minmers.insert(minimizer);
-        }
-    }
-    
-    uint64_t nb_elems = unique_minmers.size();
-
-    //STEP 3 : BUILDING MPHF ===================================================
+    //STEP 3.a : BUILDING MPHF, gather data ===================================================
     {
-        if (build_parameters.verbose >= 1) std::cout << "[I] Step 3: building the MPHF for " << unique_minmers.size() << " minimizers\n";
+        std::cout << "[I] Parsing and flattening minimizers to " << temp_flat_file << "...\n";
+        
+        // Open output stream with a buffer
+        std::ofstream out_stream(temp_flat_file, std::ios::binary);
+        if (!out_stream) {
+            std::cerr << "Error: Could not create temp file.\n";
+            exit(1);
+        }
+
+        const size_t WRITE_BUF_SIZE = 1024 * 1024; // 1M items (8MB)
+        std::vector<uint64_t> write_buf;
+        write_buf.reserve(WRITE_BUF_SIZE);
+
+        auto flush_buffer = [&]() {
+            if (!write_buf.empty()) {
+                out_stream.write(reinterpret_cast<const char*>(write_buf.data()), 
+                                 write_buf.size() * sizeof(uint64_t));
+                write_buf.clear();
+            }
+        };
+
+        // 1. DENSE FILE
+        stream_reader* dense_parser = stream_reader_library::allocate(Bzhminmer_file);
+        size_t got_dense = 0;
+        while (true) {
+            size_t items_read = dense_parser->read(input_buffer.data(), 
+                                                   elem_words * sizeof(uint64_t), 
+                                                   got_dense); 
+            if (items_read == 0) break;
+            for (size_t i = 0; i < items_read; ++i) { 
+                uint64_t minimizer = input_buffer[i * elem_words];
+                
+                write_buf.push_back(minimizer);
+                if (write_buf.size() >= WRITE_BUF_SIZE) flush_buffer();
+                nb_elems++;
+            }
+        }
+        delete dense_parser;
+        nb_elems_dense = nb_elems;
+
+        // 2. SPARSE FILE
+        kaminari::helpers::SparseFileParser sparse_parser(Bzhminmer_file_sparse);
+        if (sparse_parser.is_open()) {
+            uint64_t minimizer;
+            uint64_t bits = utils::sparse_colors_bits(nb_docs);
+            while (sparse_parser.next_minimizer_only(minimizer, bits)) {
+                write_buf.push_back(minimizer);
+                if (write_buf.size() >= WRITE_BUF_SIZE) flush_buffer();
+                nb_elems++;
+            }
+        }
+
+        flush_buffer(); // Write remaining items
+        out_stream.close();
+        // Cleanup temp file
+        std::remove(temp_flat_file.c_str());
+    }
+
+    //STEP 3.b : BUILDING MPHF  =========================================================
+    {
+        if (build_parameters.verbose >= 1) std::cout << "[I] Step 3: building the MPHF for " << nb_elems << " minimizers\n";
         start_time = std::chrono::high_resolution_clock::now();
-        int backup, redirect;
+        
+        // Create the iterator we defined above
+        kaminari::helpers::BinaryFileIterator file_it(temp_flat_file);
+
+        // Standard pthash boilerplate
+        int backup = dup(1);
+        int redirect = open("/dev/null", O_WRONLY);
         fflush(stdout);
-        backup = dup(1);
-        redirect = open("/dev/null", O_WRONLY);
         dup2(redirect, 1);
         close(redirect);
 
-        //MPHF via PTHash, n minmers, hf : minmer(uint64) -> [0, n-1]
-        hf.build_in_external_memory(unique_minmers.begin(), unique_minmers.size(), get_pthash_options(build_parameters));
+        // BUILD: Pass the iterator and the count we just calculated
+        hf.build_in_external_memory(file_it, nb_elems, get_pthash_options(build_parameters));
 
         fflush(stdout);
         dup2(backup, 1);
         close(backup);
-        assert(hf.num_keys() == unique_minmers.size());
 
         if (build_parameters.verbose >= 1) {
             std::cout << "[I] Step 3 (MPHF) time: " << 
@@ -115,10 +152,9 @@ index::build(build::options_t& build_parameters)
         if (build_parameters.verbose >= 2) {
             std::cout << "[II] MPHF Size : " << hf.num_bits()/8 << " Bytes = " << hf.num_bits()/constants::MB << " MB\n"; 
         }
-
-        ankerl::unordered_dense::set<uint64_t>().swap(unique_minmers); //free memory
     }
 
+    
     // common variables for CM & CS
     uint64_t ram_budget = static_cast<uint64_t>(build_parameters.max_ram_MB * 0.75); //75% of allocated RAM for CM & CS
 
