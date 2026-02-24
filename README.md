@@ -131,6 +131,6 @@ Still from `kaminari/build`, run:
     ./kaminari query -x ../example/salmonella10_index -i ../example/two_queries.fasta -o ../example/two_queries_result.txt -r 0.8 -t 4 -v 1
     cat ../example/two_queries_result.txt
 
-You can check the result in `example/two_queries_result.txt` and see that the first sequence is mainly present in docs 0, 3, 7, and 8, which corresponds to the 1st, 4th, 8th, and 9th lines in `example/salmonella_10_filenames.list` (document IDs start from 0). 
+You can check the result in `example/two_queries_result.txt` and see that the first sequence is mainly present in docs 0, 5, 7, and 9, which corresponds to the 1st, 6th, 8th, and 10th lines in `example/salmonella_10_filenames.list` (document IDs start from 0). 
 
-The second sequence is reported for all 10 documents, but note how only documents 0, 4, 7, and 8 have the maximal count. The other ones share fewer k-mers with the sequence, but still over 80% (`-r 0.8`), so Kaminari reports them.
+The second sequence is reported for all 10 documents, but note how only documents 0, 5, 7, and 9 have the maximal count. The other ones share fewer k-mers with the sequence, but still over 80% (`-r 0.8`), so Kaminari reports them.
