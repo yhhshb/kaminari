@@ -59,10 +59,10 @@ argparse::ArgumentParser get_parser()
         .help("minimizer length (must be < k)")
         .scan<'u', std::size_t>()
         .default_value(size_t(19));
-    parser.add_argument("-a", "--canonical")
-        .help("canonical minimizers")
-        .default_value(false)
-        .implicit_value(true);
+    parser.add_argument("-n", "--non-canonical")
+        .help("turn OFF canonical minimizers")
+        .default_value(true)
+        .implicit_value(false);
     parser.add_argument("-b", "--bit-check")
         .help("number of bits used to check minmers")
         .scan<'d', size_t>()
@@ -121,7 +121,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.seed = parser.get<uint64_t>("--seed");
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
-    opts.canonical = parser.get<bool>("--canonical");
+    opts.canonical = !parser.get<bool>("--non-canonical");
     opts.keep_tmp_files = parser.get<bool>("--keep-tmp-files");
     opts.verbose = parser.get<std::size_t>("--verbose");
 
