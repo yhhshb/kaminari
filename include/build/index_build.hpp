@@ -144,7 +144,9 @@ index::build(build::options_t& build_parameters)
         }
         
         if (build_parameters.verbose >= 2) {
-            std::cout << "[II] MPHF Size : " << hf.num_bits()/8 << " Bytes = " << hf.num_bits()/constants::MB << " MB" << std::endl; 
+            std::cout << std::fixed << std::setprecision(9) 
+                      << "[II] MPHF Size : " << hf.num_bits()/8 << " Bytes = " 
+                      << static_cast<double>(hf.num_bits())/8/constants::MB << " MB" << std::endl;
         }
 
         if (build_parameters.keep_tmp_files == false) {
@@ -154,8 +156,8 @@ index::build(build::options_t& build_parameters)
 
 
     // common variables for CM & CS
-    uint64_t ram_budget = static_cast<uint64_t>(build_parameters.max_ram_MB - hf.num_bits() / 8 * constants::MB) ; // RAM left for CM and CS after loading MPHF in memory
-    if (hf.num_bits() / 8 * constants::MB >= build_parameters.max_ram_MB + 1024) {
+    uint64_t ram_budget = static_cast<uint64_t>(build_parameters.max_ram_MB - hf.num_bits() / 8 / constants::MB) ; // RAM left for CM and CS after loading MPHF in memory
+    if (hf.num_bits() / 8 / constants::MB >= build_parameters.max_ram_MB + 1024) {
         std::cout << "[0] MPHF already reaches RAM limit, Kaminari might use more resources than specified. If not enough, SWAP will be used and time might drastically increase." << std::endl;
 
         ram_budget = 1024;  
