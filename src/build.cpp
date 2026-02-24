@@ -121,7 +121,7 @@ options_t check_args(const argparse::ArgumentParser& parser)
     opts.seed = parser.get<uint64_t>("--seed");
     opts.b = parser.get<std::size_t>("--bit-check");
     opts.pthash_constant = parser.get<double>("--pthash-constant");
-    opts.canonical = !parser.get<bool>("--non-canonical");
+    opts.canonical = parser.get<bool>("--non-canonical");
     opts.keep_tmp_files = parser.get<bool>("--keep-tmp-files");
     opts.verbose = parser.get<std::size_t>("--verbose");
 
