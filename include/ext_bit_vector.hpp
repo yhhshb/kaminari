@@ -63,32 +63,46 @@ public:
         ++m_size;
     }
 
+
     // append multiple bits contained inside data (lower n_bits are used)
     void push_back(uint64_t data, uint64_t n_bits) {
+        if (n_bits == 0) return; 
+
         size_t pos = m_size % BITS;
-        if (pos == 0){
+        
+        // Handle Auto-Growth for new words
+        if (pos == 0) {
             if (m_data.size() * sizeof(uint64_t) + sizeof(uint64_t) >= m_ram_limit_bytes) {
                 flush_available();
             }
             m_data.push_back(0);
         } 
+
         size_t idx = (m_size / BITS) - m_flushed_words;
+
+        // Write the lower part of data
+        m_data[idx] |= data << pos; 
         m_size += n_bits;
 
-        m_data[idx] |= data << pos; //insert lsb into current word
-
         if (pos + n_bits > BITS) {
+            uint64_t remaining_bits = data >> (BITS - pos);
+
+            // If the current word (idx) was the last one, and we need to add a new one,
+            // check RAM limit first.
             if (m_data.size() * sizeof(uint64_t) + sizeof(uint64_t) >= m_ram_limit_bytes) {
-                flush_available();
+                // Flush but KEEP the word we just wrote the first part into
+                flush_available(true); 
+                // After flush(true), m_data has 1 element (our partial word).
+                // The next part goes into the *new* word at index 1.
+                idx = 0; 
             }
-            m_data.push_back(0);
-            pos = m_size % BITS;
-            idx = (m_size / BITS) - m_flushed_words;
-            
-            m_data[idx] |= data >> (n_bits - pos); //insert msb into new word if needed
+
+            if (m_data.size() <= idx + 1) {
+                m_data.push_back(0);
+            }
+
+            m_data[idx + 1] |= remaining_bits;
         }
-    
-        
     }
 
     // set bit
@@ -144,18 +158,33 @@ private:
 
     void flush_available(bool keep_last = false) {
         if (m_fd == nullptr) open_file();
-        size_t to_flush = m_data.size();
-        if (keep_last) to_flush--;
+        
+        if (m_data.empty()) return;
 
-        size_t written = fwrite(m_data.data(), sizeof(uint64_t), to_flush, m_fd); 
-        if (written != to_flush) {
-            fclose(m_fd);
-            m_fd = nullptr;
-            throw std::runtime_error("Error writing to file " + m_filename);
+        size_t to_flush = m_data.size();
+        if (keep_last) {
+            if (to_flush == 0) return; // Should not happen but safe
+            to_flush--;
         }
 
-        m_data.clear();
-        m_flushed_words += written;
+        if (to_flush > 0) {
+            size_t written = fwrite(m_data.data(), sizeof(uint64_t), to_flush, m_fd);
+            if (written != to_flush) {
+                fclose(m_fd);
+                m_fd = nullptr;
+                throw std::runtime_error("Error writing to file " + m_filename);
+            }
+            m_flushed_words += written;
+        }
+
+        // Critical: Handle the kept word
+        if (keep_last) {
+            uint64_t last = m_data.back();
+            m_data.clear();
+            m_data.push_back(last);
+        } else {
+            m_data.clear();
+        }
     }
     
 };
